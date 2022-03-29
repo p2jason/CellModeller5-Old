@@ -1,0 +1,12 @@
+[submodule "CellModeller/third_party/glslang"]
+	path = CellModeller/third_party/glslang
+	url = https://github.com/KhronosGroup/glslang.git
+[submodule "CellModeller/third_party/volk"]
+	path = CellModeller/third_party/volk
+	url = https://github.com/zeux/volk.git
+[submodule "CellModeller/third_party/pybind11"]
+	path = CellModeller/third_party/pybind11
+	url = https://github.com/pybind/pybind11.git
+[submodule "CellModeller/third_party/Vulkan-Headers"]
+	path = CellModeller/third_party/Vulkan-Headers
+	url = https://github.com/KhronosGroup/Vulkan-Headers.git
