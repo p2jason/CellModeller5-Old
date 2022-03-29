@@ -163,15 +163,15 @@ function initFrame(gl, context) {
 
 	//
 	render.init(gl, context)
-		//.then(() => { createNewSimulation(context); });
-		.then(() => requestSimulationInfo(context, context["simUUID"]))
+		.then(() => { createNewSimulation(context); });
+		/*.then(() => requestSimulationInfo(context, context["simUUID"]))
 		.then(() => {
 			const frameCount = context["simInfo"].frameCount;
 
 			if (frameCount > 0) {
 				return requestFrame(context, context["simUUID"], 0);
 			}
-		});
+		});*/
 }
 
 function drawScene(gl, context, delta) {
