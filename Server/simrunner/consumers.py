@@ -1,44 +1,23 @@
 from channels.generic.websocket import WebsocketConsumer
 import json
 
-from . import apps
+from . import websocket_groups as wsgroups
+from .backend.SimulationProcess import is_simulation_running, send_message_to_simulation
 
 class SimCommsConsumer(WebsocketConsumer):
 	def connect(self):
 		self.sim_uuid = str(self.scope["url_route"]["kwargs"]["sim_uuid"])
 
-		instances, sim_lock = apps.get_active_simulations()
+		if not is_simulation_running(self.sim_uuid):
+			self.close(code=4101)
+			return
 
-		with sim_lock:
-			process = instances.get(self.sim_uuid, None)
-
-			if process is None or process.is_closed():
-				self.close(code=4101)
-				return
-
-			with process.clients_lock:
-				process.clients.append(self)
+		wsgroups.add_websocket_to_group(f"simcomms/{self.sim_uuid}", self)
 
 		self.accept()
 
 	def disconnect(self, close_code):
-		instances, sim_lock = apps.get_active_simulations()
-		with sim_lock:
-			process = instances.get(self.sim_uuid, None)
-
-			if process is None:
-				return
-
-			with process.clients_lock:
-				if self in process.clients:
-					process.clients.remove(self)
-		
-		return
+		wsgroups.remove_websocket_from_group(f"simcomms/{self.sim_uuid}", self)
 
 	def receive(self, text_data):
-		instances, sim_lock = apps.get_active_simulations()
-
-		json_data = json.loads(text_data)
-
-		with sim_lock:
-			instances[str(self.sim_uuid)].endpoint.send_item(json_data)
+		send_message_to_simulation(self.sim_uuid, json.loads(text_data))

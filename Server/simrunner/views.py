@@ -3,7 +3,7 @@ from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFou
 from django.views.decorators.csrf import csrf_exempt
 
 from . import apps
-from .backend.SimulationProcess import SimulationProcess
+from .backend.SimulationProcess import spawn_simulation, kill_simulation
 from .backend.SimulationBackend import BackendParameters
 
 from saveviewer import archiver as sv_archiver
@@ -51,9 +51,9 @@ def create_new_simulation(request):
 	params.source = sim_source
 	
 	use_custom_backend = type(sim_backend) is dict
+	id_str = str(sim_uuid)
 
 	try:
-		id_str = str(sim_uuid)
 		extra_vars = { "backend_version": sim_backend }
 
 		paths = sv_archiver.get_save_archiver().register_simulation(id_str, f"./{id_str}", sim_name, use_custom_backend, extra_init_vars=extra_vars)
@@ -83,21 +83,17 @@ def create_new_simulation(request):
 	elif not type(sim_backend) is str:
 		return HttpResponseBadRequest(f"Invalid backend data type: {type(sim_backend)}")
 	
-	print(f"[Simulation Runner]: Creating new simulation '{str(sim_uuid)}': ")
+	print(f"[Simulation Runner]: Creating new simulation '{id_str}': ")
 
 	# Spawn simulation
-	instances, sim_lock = apps.get_active_simulations()
+	spawn_simulation(id_str, params)
 
-	with sim_lock:
-		instances[str(sim_uuid)] = SimulationProcess(params)
-
-	return HttpResponse(str(sim_uuid))
+	return HttpResponse(id_str)
 
 def stop_simulation(request):
 	if not "uuid" in request.GET:
 		return HttpResponseBadRequest("No simulation UUID provided")
 
-	sim_id = request.GET["uuid"]
-	apps.kill_simulation(sim_id)
+	kill_simulation(request.GET["uuid"])
 
 	return HttpResponse()

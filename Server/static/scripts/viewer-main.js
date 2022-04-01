@@ -34,23 +34,8 @@ function requestFrame(context, uuid, index) {
 		.catch(error => console.log("Error when reuesting simulation info:", error));
 }
 
-function createNewSimulation(name, source, backend) {
-	return fetch("/api/simrunner/createnewsimulation", {
-			method: "POST",
-			headers: {
-				"Accept": "text/plain",
-				"Content-Type": "text/plain",
-			},
-			body: JSON.stringify({
-				"name": name,
-				"source": source,
-				"backend": backend
-			})
-		})
-		.then(response => {
-			if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
-			return response.text();
-		});
+async function waitForInitialization(context, uuid) {
+	
 }
 
 async function beginSimulation(context, uuid) {

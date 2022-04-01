@@ -10,8 +10,8 @@ from .CellModeller4Backend import CellModeller4Backend
 from .DuplexPipeEndpoint import DuplexPipeEndpoint
 
 from simrunner import apps
+from simrunner import websocket_groups as wsgroups
 from saveviewer import archiver as sv_archiver
-from enum import Enum
 
 class InstanceMessage:
 	def __init__(self, action="", data=None):
@@ -44,10 +44,6 @@ class SimulationProcess:
 		self.endpoint = DuplexPipeEndpoint(parent_pipe, self.on_message_from_instance, self.on_endpoint_closed)
 		self.endpoint.start()
 
-		# I'm mot really sure if this lock is needed, but oh well...
-		self.clients_lock = threading.Lock()
-		self.clients = []
-
 		print(f"[INSTANCE CONTROLLER]: Started instance controller")
 
 	def __del__(self):
@@ -79,26 +75,14 @@ class SimulationProcess:
 				return
 
 			# Send the message to all the connected clients
-			with self.clients_lock:
-				for client in self.clients:
-					client.send(text_data=message_text)
+			wsgroups.send_message_to_websocket_group(f"simcomms/{self.params.uuid}", message_text)
 		except Exception as e:
 			traceback.print_exc()
 
 		return
 
 	def on_endpoint_closed(self):
-		# When we close the connection object, the communication thread will remove the 
-		# client from the clients list. This is going to cause a problem, since we are
-		# also iterating over the list of clients. To solve this, we can just create a
-		# copy (shallow copy) of the clients list and iterate over that
-		with self.clients_lock:
-			clients = self.clients.copy()
-
-		for client in clients:
-			client.close()
-
-		apps.kill_simulation(self.params.uuid, True)
+		kill_simulation(self.params.uuid, True)
 
 		self.pipes[0].close()
 		self.pipes[1].close()
@@ -209,3 +193,54 @@ def instance_control_thread(pipe, params):
 	endpoint.shutdown()
 
 	log_stream.close()
+
+# Yes, I know that globals are considered bad practice, but I couldn't find another way to do it.
+# This isn't "just some data that you can save in a database", so all solutions that invlove persistent
+# storage or caching are out the window. We also cannot use sessions because they are limited to a single
+# client connection.
+# I'm going to give it a bit of an unorthodox name so that is doesn't get used somewhere else accidentally
+global__active_instances = {}
+global__instance_lock = threading.Lock()
+
+def spawn_simulation(uuid: str, params):
+	global global__active_instances
+	global global__instance_lock
+
+	wsgroups.create_websocket_group(f"simcomms/{uuid}")
+
+	with global__instance_lock:
+		global__active_instances[uuid] = SimulationProcess(params)
+
+def kill_simulation(uuid: str, remove_only=False):
+	global global__active_instances
+	global global__instance_lock
+
+	wsgroups.close_websocket_group(f"simcomms/{uuid}")
+
+	with global__instance_lock:
+		sim_instance = global__active_instances.pop(uuid, None)
+
+		if sim_instance is None:
+			return False
+		
+		if not remove_only:
+			print(f"[Simulation Runner]: Stopping simulation '{uuid}'")
+
+			sim_instance.close()
+
+	return True
+
+def is_simulation_running(uuid: str):
+	global global__active_instances
+	global global__instance_lock
+
+	with global__instance_lock:
+		process = global__active_instances.get(uuid, None)
+		return not (process is None or process.is_closed())
+
+def send_message_to_simulation(uuid: str, message):
+	global global__active_instances
+	global global__instance_lock
+
+	with global__instance_lock:
+			global__active_instances[uuid].endpoint.send_item(message)

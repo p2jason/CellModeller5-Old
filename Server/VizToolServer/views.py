@@ -2,7 +2,10 @@ from django.http import HttpResponse
 
 from django.template import Context, Template
 
-def home(request, sim_uuid):
+def home(request):
+	return HttpResponse(open("static/index.html", "rb"))
+
+def viewer(request, sim_uuid):
 	index_data = ""
 
 	with open("static/viewer.html", "r") as index_file:
