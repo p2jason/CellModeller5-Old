@@ -2,11 +2,21 @@ import os
 import json
 import pathlib
 
+
+class ArchivePaths:
+	def __init__(self):
+		self.root_path = None
+		self.cache_path = None
+		self.relative_cache_path = None
+		self.backend_path = None
+		self.relative_backend_path = None
+
 class SaveArchiver:
 	def __init__(self):
 		self.archive_root = "./save-archive/"
 		self.master_path = os.path.join(self.archive_root, "index.json")
 		self.sim_data = {}
+		self.online_sims = set()
 
 		pathlib.Path(self.archive_root).mkdir(parents=False, exist_ok=True)
 
@@ -32,48 +42,68 @@ class SaveArchiver:
 			master_file.write(json.dumps(self.master_data))
 			master_file.truncate()
 
-	def register_simulation(self, uuid, path, name):
-		assert isinstance(uuid, str)
-
+	def register_simulation(self, uuid: str, path: str, name: str, create_backend_dir: bool, extra_init_vars: object=None):
 		self.master_data["saved_simulations"][uuid] = path
 		self.update_master_file()
 
-		relative_cache_path = "./cache"
 		root_path = os.path.join(self.archive_root, path)
+
+		relative_cache_path = "./cache"
 		cache_path = os.path.join(root_path, relative_cache_path)
+
+		relative_backend_path = "./backend"
+		backend_path = os.path.join(root_path, relative_backend_path)
 
 		os.mkdir(root_path)
 		os.mkdir(cache_path)
 
+		if create_backend_dir:
+			os.mkdir(backend_path)
+
 		self.sim_data[uuid] = { "frames": {}, "name": name, "num_frames": 0 }
+		self.online_sims.add(uuid)
+
+		if not extra_init_vars is None:
+			self.sim_data[uuid].update(extra_init_vars)
 		
 		with open(os.path.join(root_path, "index.json"), "w+") as index_file:
 			index_file.seek(0)
 			index_file.write(json.dumps(self.sim_data[uuid]))
 			index_file.truncate()
 
-		return root_path, cache_path, relative_cache_path
+		paths = ArchivePaths()
+		paths.root_path = root_path
+		paths.cache_path = cache_path
+		paths.relative_cache_path = relative_cache_path
 
-	def update_step_data(self, uuid, step_data):
-		assert isinstance(uuid, str)
+		if create_backend_dir:
+			paths.backend_path = backend_path
+			paths.relative_backend_path = relative_backend_path
+		else:
+			paths.backend_path = None
+			paths.relative_backend_path = None
 
+		return paths
+
+	def update_step_data(self, uuid: str, step_data: object):
 		self.sim_data[uuid] = step_data
 
 	def get_all_sim_data(self):
 		return self.sim_data
 
-	def get_sim_index_data(self, uuid):
+	def get_sim_index_data(self, uuid: str):
 		return self.sim_data[uuid]
 
-	def get_sim_bin_file(self, uuid, index):
-		assert isinstance(uuid, str)
+	def is_sim_online(self, uuid: str):
+		return uuid in self.online_sims
 
+	def get_sim_bin_file(self, uuid: str, index: int):
 		simulation_root = self.master_data["saved_simulations"][uuid]
 		frame_relative_path = self.sim_data[uuid]["frames"][index]
 
 		return os.path.join(self.archive_root, simulation_root, frame_relative_path)
 
-def add_entry_to_sim_index(index_path, step_file, viz_bin_file):
+def add_entry_to_sim_index(index_path, step_file: str, viz_bin_file: str):
 	with open(index_path, "r+") as index_file:
 		sim_data = json.loads(index_file.read())
 

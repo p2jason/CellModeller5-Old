@@ -2,13 +2,13 @@ import os
 
 from .SimulationBackend import SimulationBackend
 
-from CellModeller.Simulator import Simulator
+import CellModeller as CellModeller4
 
-import pickle
 import struct
 import io
+import os
 
-import time
+import importlib
 
 class CellModeller4Backend(SimulationBackend):
 	def __init__(self, params):
@@ -18,7 +18,19 @@ class CellModeller4Backend(SimulationBackend):
 		self.simulation = None
 	
 	def initialize(self):
-		self.simulation = Simulator(self.params.name, self.params.delta_time, moduleStr=self.params.source, clPlatformNum=0, clDeviceNum=0, is_gui=False, saveOutput=False)
+		# Load module
+		if type(self.params.backend_version) is str:
+			module = importlib.import_module("CellModeller.Simulator")
+		else:
+			# If we were to import the source directory (i.e. 'CellModeller/'), importlib won't import anything.
+			# I'm guessing this is because '__init__.py' is empty. To solve this, we can import 'Simulator.py'
+			# directly. I'm not sure how correct this is.
+			simulator_path = os.path.join(self.params.backend_dir, "CellModeller", "Simulator.py")
+
+			module = importlib.import_module("CellModeller.Simulator", simulator_path)
+
+		# Setup simulator properties
+		self.simulation = module.Simulator(self.params.name, self.params.delta_time, moduleStr=self.params.source, clPlatformNum=0, clDeviceNum=0, is_gui=False, saveOutput=False)
 		self.simulation.outputDirPath = self.params.sim_root_dir
 
 		if self.simulation.moduleStr:

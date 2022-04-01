@@ -315,14 +315,11 @@ export async function init(gl, context) {
 	context["cellData"] = null;
 
 	//Load the bacterium
-	fetch("/static/bacterium.gltf")
-		.then(response => {
-			if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
-			return response.json();
-		})
-		.then(gltf => loadBacteriumModel(gltf, gl, context))
-		.then(mesh => { context["bacteriumMesh"] = mesh; })
-		.catch(error => console.log("Error when loading GLTF model: ", error));
+	const bacteriumData = await fetch("/static/bacterium.gltf");
+	const bacteriumGLTF = await bacteriumData.json();
+	const bacteriumModel = await loadBacteriumModel(bacteriumGLTF, gl, context);
+
+	context["bacteriumMesh"] = bacteriumModel;
 }
 
 function prepassScene(gl, context, delta) {

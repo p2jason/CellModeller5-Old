@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<script src="/static/scripts/gl-matrix-min.js" type="module"></script>
+	<script src="/static/scripts/viewer-main.js" type="module"></script>
+	<script src="/static/scripts/viewer-render.js" type="module"></script>
+	<link rel="stylesheet" href="/static/viewer-stylesheet.css"/>
+</head>
+<body>
+	<input type="hidden" id="uuid-field" value="{{ simulation_uuid }}">
+
+	<div id="stackedcontainer">
+		<canvas id="renderTargetCanvas"></canvas>
+		<div id="canvas-overlay">
+
+			<div class="center-children">
+				<div id="timeline-header">
+					<div class="item-background" style="width: 100%">
+						<input type="range" id="frame-timeline" class="force-input">
+					</div>
+					<ul id="timeline-controls">
+						<li>
+							<div class="center-children"><p id="sim-name" class="item-background center-children">Name: No Simulation</p></div>
+							<div class="center-children"><p id="sim-frame" class="item-background">Frame: 0 / 0</p></div>
+						</li>
+						<li>
+							<div class="item-background">
+								<input type="checkbox" id="snap-to-last" name="snap-to-last" class="force-input" checked>
+								<label for="snap-to-last">Snap to last step</label>
+							</div>
+						</li>
+					</ul>
+				</div>
+			</div>
+
+			<div id="status-container" class="item-background">
+				<p>Status:</p><p id="status-label">Offline</p>
+			</div>
+
+		</div>
+	</div>
+</body>
+</html>

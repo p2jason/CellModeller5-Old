@@ -1,42 +1,30 @@
-import * as render from './render.js'
+import * as render from './viewer-render.js'
+
+function setSimName(name) {
+	document.getElementById("sim-name").innerHTML = `Name: ${name}`;
+}
 
 function setSimFrame(index, frameCount) {
 	document.getElementById("sim-frame").innerHTML = `Frame: ${index} / ${frameCount}`;
 }
 
-function requestSimulationInfo(context, uuid) {
-	context["simInfo"] = {};
-	context["simInfo"].frameIndex = 0;
-
-	setSimFrame(0, 0);
-
-	return fetch(`/api/saveviewer/simulationinfo?uuid=${uuid}`)
-		.then(response => {
-			if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
-			return response.json();
-		})
-		.then(info => {
-			context["simInfo"].name = info.name;
-			context["simInfo"].frameCount = info.frameCount;
-
-			document.getElementById("sim-name").innerHTML = `Name: ${info.name}`;
-
-			var timeline = context["timelineSlider"];
-			timeline.min = 1;
-			timeline.max = context["simInfo"].frameCount;
-			timeline.step = 1;
-			timeline.value = 0;
-		})
-		.catch(error => console.log("Error when reuesting simulation info:", error));
+function setStatusMessage(message) {
+	document.getElementById("status-label").innerHTML = message;
 }
 
 function requestFrame(context, uuid, index) {
+	context["current_index"] = index
+
 	return fetch(`/api/saveviewer/framedata?index=${index}&uuid=${uuid}`)
 		.then(response => {
 			if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
 			return response.arrayBuffer();
 		})
 		.then(buffer => {
+			if (context["current_index"] != index) {
+				return;
+			}
+
 			context["simInfo"].frameIndex = index;
 
 			setSimFrame(index + 1, context["simInfo"].frameCount);
@@ -46,42 +34,7 @@ function requestFrame(context, uuid, index) {
 		.catch(error => console.log("Error when reuesting simulation info:", error));
 }
 
-function openSimComms(context, uuid) {
-	var chatSocket = new WebSocket(`ws://${window.location.host}/ws/simcomms/${uuid}`);
-			
-	chatSocket.onopen = function(e) {
-		//chatSocket.send(JSON.stringify({ }));
-	};
-	
-	chatSocket.onmessage = function(e) {
-		const message = JSON.parse(e.data);
-
-		if (message["action"] == "newframe") {
-			const frameCount = message["data"]["framecount"];
-
-			context["simInfo"].frameCount = frameCount;
-			context["timelineSlider"].max = frameCount;
-
-			setSimFrame(context["simInfo"].frameIndex, frameCount);
-
-			if (context["alwaysUseLatestStep"] && frameCount > 0) {
-				requestFrame(context, context["simUUID"], frameCount - 1);
-
-				context["timelineSlider"].value = frameCount;
-			}
-		}
-	};
-	
-	chatSocket.onclose = function(e) {
-		//TODO: fetch(`http://localhost:8000/api/simrunner/stopsimulation?uuid=${simUUID}`);
-		//console.error("Chat socket closed unexpectedly");
-	};
-}
-
-async function createNewSimulation(context) {
-	const testName = "This is the name";
-	const testProgram = "import random\nfrom CellModeller.Regulation.ModuleRegulator import ModuleRegulator\nfrom CellModeller.Biophysics.BacterialModels.CLBacterium import CLBacterium\nfrom CellModeller.GUI import Renderers\nimport numpy\nimport math\n\nN0 = 10\n\ndef setup(sim):\n    # Set biophysics, signalling, and regulation models\n    biophys = CLBacterium(sim, jitter_z=False, gamma = 100, max_cells=100000, max_planes=1)\n\n    regul = ModuleRegulator(sim, sim.moduleName)	# use this file for reg too\n    # Only biophys and regulation\n    sim.init(biophys, regul, None, None)\n\n    #biophys.addPlane((0,0,0),(0,0,1),1.0) #Base plane\n    #biophys.addPlane((10,0,0),(-1,0,0),1.0)\n    #biophys.addPlane((-10,0,0),(1,0,0),1.0)\n    #biophys.addPlane((0,10,0),(0,-1,0),1.0)\n    #biophys.addPlane((0,-10,0),(0,1,0),1.0)\n\n    sim.addCell(cellType=0, pos=(0,0,0))\n\n    # Add some objects to draw the models\n    therenderer = Renderers.GLBacteriumRenderer(sim)\n    sim.addRenderer(therenderer)\n    sim.pickleSteps = 1\n\ndef init(cell):\n    cell.targetVol = 3.5 + random.uniform(0.0,0.5)\n    cell.growthRate = 1.0\n    cell.n_a = N0//2\n    cell.n_b = N0 - cell.n_a\n\ndef update(cells):\n    for (id, cell) in cells.items():\n        cell.color = [0.1, cell.n_a/3.0, cell.n_b/3.0]\n        if cell.volume > cell.targetVol:\n            cell.divideFlag = True\n\ndef divide(parent, d1, d2):\n    d1.targetVol = 3.5 + random.uniform(0.0,0.5)\n    d2.targetVol = 3.5 + random.uniform(0.0,0.5)\n    plasmids = [0]*parent.n_a*2 + [1]*parent.n_b*2\n    random.shuffle(plasmids)\n    d1.n_a = 0\n    d1.n_b = 0\n    d2.n_a = 0\n    d2.n_b = 0\n    for p in plasmids[:N0]:\n        if p == 0: d1.n_a +=1\n        else: d1.n_b +=1\n    for p in plasmids[N0:2*N0]:\n        if p == 0: d2.n_a +=1\n        else: d2.n_b +=1\n    assert parent.n_a + parent.n_b == N0\n    assert d1.n_a + d1.n_b == N0\n    assert d2.n_a + d2.n_b == N0\n    assert parent.n_a*2 == d1.n_a+d2.n_a\n    assert parent.n_b*2 == d1.n_b+d2.n_b\n    assert parent.n_a > 0 or (d1.n_a == 0 and d2.n_a == 0)\n    assert parent.n_b > 0 or (d1.n_b == 0 and d2.n_b == 0)\n";
-
+function createNewSimulation(name, source, backend) {
 	return fetch("/api/simrunner/createnewsimulation", {
 			method: "POST",
 			headers: {
@@ -89,20 +42,77 @@ async function createNewSimulation(context) {
 				"Content-Type": "text/plain",
 			},
 			body: JSON.stringify({
-				"name": testName,
-				"source": testProgram,
+				"name": name,
+				"source": source,
+				"backend": backend
 			})
 		})
 		.then(response => {
 			if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
 			return response.text();
-		})
-		.then(uuid => {
-			context["simUUID"] = uuid;
-			return requestSimulationInfo(context, context["simUUID"]);
-		})
-		.then(() => openSimComms(context, context["simUUID"]))
-		.catch(error => console.log("Error when creating new simulation:", error));
+		});
+}
+
+async function beginSimulation(context, uuid) {
+	context["simUUID"] = uuid;
+
+	context["simInfo"] = {};
+	context["simInfo"].frameIndex = 0;
+
+	setSimFrame(0, 0);
+	setStatusMessage("Offline");
+
+	//Request simulation info
+	const simulationData = await fetch(`/api/saveviewer/simulationinfo?uuid=${uuid}`);
+	const simulationInfo = await simulationData.json();
+
+	context["simInfo"].name = simulationInfo.name;
+	context["simInfo"].frameCount = simulationInfo.frameCount;
+	context["simInfo"].isOnline = simulationInfo.isOnline;
+
+	setSimName(simulationInfo.name);
+
+	//Update timeline 
+	context["timelineSlider"].max = simulationInfo.frameCount;
+	
+	//Request the first frame of the simulation
+	if (simulationInfo.frameCount > 0) {
+		await requestFrame(context, context["simUUID"], 0);
+	}
+
+	//Open a web socket if the simulation is live
+	if (simulationInfo.isOnline) {
+		setStatusMessage("Conneceting");
+
+		var chatSocket = new WebSocket(`ws://${window.location.host}/ws/simcomms/${uuid}`);
+			
+		chatSocket.onopen = function(e) {
+			setStatusMessage("Running");
+		};
+		
+		chatSocket.onmessage = function(e) {
+			const message = JSON.parse(e.data);
+
+			if (message["action"] == "newframe") {
+				const frameCount = message["data"]["framecount"];
+
+				context["simInfo"].frameCount = frameCount;
+				context["timelineSlider"].max = frameCount;
+
+				setSimFrame(context["simInfo"].frameIndex, frameCount);
+
+				if (context["alwaysUseLatestStep"] && frameCount > 0) {
+					requestFrame(context, context["simUUID"], frameCount - 1);
+
+					context["timelineSlider"].value = frameCount;
+				}
+			}
+		};
+		
+		chatSocket.onclose = function(e) {
+			setStatusMessage("Terminated");
+		};
+	}
 }
 
 function processTimelineChange(value, context) {
@@ -148,30 +158,29 @@ function initFrame(gl, context) {
 		"frameCount": 0
 	};
 
-	context["simUUID"] = "98db8762-a4bc-4c43-b7aa-0691d9e89ec5";
-
 	//Initialize timeline slider 
-	context["timelineSlider"] = document.getElementById("frameTimeline");
-	context["timelineSlider"].oninput = function() { processTimelineChange(this.value, context); };
-	context["timelineSlider"].min = 1;
-	context["timelineSlider"].max = 1;
+	var timelineSlider = document.getElementById("frame-timeline");
+	timelineSlider.oninput = function() { processTimelineChange(this.value, context); };
+	timelineSlider.min = 1;
+	timelineSlider.max = 1;
+	timelineSlider.step = 1;
+	timelineSlider.value = 0;
+
+	context["timelineSlider"] = timelineSlider;
 
 	var snapToLastCheckbox = document.getElementById("snap-to-last");
 	snapToLastCheckbox.onchange = function(event) { context["alwaysUseLatestStep"] = this.checked; };
 
 	context["alwaysUseLatestStep"] = snapToLastCheckbox.checked;
 
-	//
-	render.init(gl, context)
-		.then(() => { createNewSimulation(context); });
-		/*.then(() => requestSimulationInfo(context, context["simUUID"]))
-		.then(() => {
-			const frameCount = context["simInfo"].frameCount;
+	//Initialize the renderer
+	setStatusMessage("Initializing");
 
-			if (frameCount > 0) {
-				return requestFrame(context, context["simUUID"], 0);
-			}
-		});*/
+	const uuid = document.getElementById("uuid-field").value;
+
+	render.init(gl, context)
+		.then(() => beginSimulation(context, uuid))
+		.catch((error) => { console.log(`Error: ${error}`); });
 }
 
 function drawScene(gl, context, delta) {
