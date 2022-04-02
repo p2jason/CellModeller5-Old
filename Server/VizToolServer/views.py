@@ -1,10 +1,13 @@
 from django.http import HttpResponse
-
 from django.template import Context, Template
 
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt
 def home(request):
 	return HttpResponse(open("static/index.html", "rb"))
 
+@csrf_exempt
 def viewer(request, sim_uuid):
 	index_data = ""
 

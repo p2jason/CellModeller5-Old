@@ -85,8 +85,8 @@ class DuplexPipeEndpoint:
 		if not self.running:
 			return
 
-		# I don't think we should wait for the message queue to be empty.
-		# If we are closing the endpoint, that means we probably won't be
+		# NOTE(Jason): I don't think we should wait for the message queue to be
+		# empty. If we are closing the endpoint, that means we probably won't be
 		# processing any more messages anyway
 		# self.msg_queue.join()
 

@@ -11,7 +11,7 @@
 				"branch": "master"
 			};
 
-			backend = "CellModeller4";
+			//backend = "CellModeller4";
 
 			fetch("/api/simrunner/createnewsimulation", {
 				method: "POST",
@@ -39,15 +39,12 @@
 	</script>
 </head>
 <body>
-	
-	<form id="create-sim-form" onsubmit="submitCreateForm()">
+	<form id="create-sim-form" onsubmit="submitCreateForm()" method="post">
 		<label for="fname">First name:</label><br>
 		<input type="text" id="fname" name="fname"><br>
 		<label for="lname">Last name:</label><br>
 		<input type="text" id="lname" name="lname">
 	</form>
-
 	<button type="submit" form="create-sim-form">Create</button>
-
 </body>
 </html>

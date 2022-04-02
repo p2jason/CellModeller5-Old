@@ -22,8 +22,8 @@ class CellModeller4Backend(SimulationBackend):
 		if type(self.params.backend_version) is str:
 			module = importlib.import_module("CellModeller.Simulator")
 		else:
-			# If we were to import the source directory (i.e. 'CellModeller/'), importlib won't import anything.
-			# I'm guessing this is because '__init__.py' is empty. To solve this, we can import 'Simulator.py'
+			# NOTE(Jason): If we were to import the source directory (i.e. 'CellModeller/'), importlib won't import
+			# anything. I'm guessing this is because '__init__.py' is empty. To solve this, we can import 'Simulator.py'
 			# directly. I'm not sure how correct this is.
 			simulator_path = os.path.join(self.params.backend_dir, "CellModeller", "Simulator.py")
 

@@ -12,6 +12,25 @@ function setStatusMessage(message) {
 	document.getElementById("status-label").innerHTML = message;
 }
 
+function setButtonContainerDisplay(display) {
+	document.getElementById("button-container").style.display = display;
+}
+
+function setInitLogDisplay(display) {
+	document.getElementById("init-log-container").style.display = display;
+}
+
+function appendInitLogMessage(message) {
+	var textArea = document.getElementById("init-log-text");
+
+	if (textArea.value.length > 0) {
+		textArea.value += "\n";
+	}
+
+	textArea.value += message;
+	textArea.scrollTop = textArea.scrollHeight;
+}
+
 function requestFrame(context, uuid, index) {
 	context["current_index"] = index
 
@@ -35,7 +54,25 @@ function requestFrame(context, uuid, index) {
 }
 
 async function waitForInitialization(context, uuid) {
+	var logSocket = new WebSocket(`ws://${window.location.host}/ws/initlogs/${uuid}`);
 	
+	logSocket.onopen = function(e) {
+		setInitLogDisplay("inline");
+	};
+	
+	logSocket.onmessage = function(e) {
+		appendInitLogMessage(e.data);
+	};
+	
+	logSocket.onclose = (e) => {
+		console.log(e.code);
+		if (e.code == 4103) {
+			// 
+		} else {
+			setInitLogDisplay("none");
+			beginSimulation(context, uuid);
+		}
+	};
 }
 
 async function beginSimulation(context, uuid) {
@@ -67,15 +104,15 @@ async function beginSimulation(context, uuid) {
 
 	//Open a web socket if the simulation is live
 	if (simulationInfo.isOnline) {
+		setButtonContainerDisplay("block")
+		
 		setStatusMessage("Conneceting");
 
-		var chatSocket = new WebSocket(`ws://${window.location.host}/ws/simcomms/${uuid}`);
+		var commsSocket = new WebSocket(`ws://${window.location.host}/ws/simcomms/${uuid}`);
 			
-		chatSocket.onopen = function(e) {
-			setStatusMessage("Running");
-		};
+		commsSocket.onopen = (e) => setStatusMessage("Running");
 		
-		chatSocket.onmessage = function(e) {
+		commsSocket.onmessage = function(e) {
 			const message = JSON.parse(e.data);
 
 			if (message["action"] == "newframe") {
@@ -94,10 +131,12 @@ async function beginSimulation(context, uuid) {
 			}
 		};
 		
-		chatSocket.onclose = function(e) {
-			setStatusMessage("Terminated");
-		};
+		commsSocket.onclose = (e) => setStatusMessage("Terminated");
 	}
+}
+
+function stopSimulation(context) {
+	fetch(`/api/simrunner/stopsimulation?uuid=${context["simUUID"]}`);
 }
 
 function processTimelineChange(value, context) {
@@ -158,13 +197,16 @@ function initFrame(gl, context) {
 
 	context["alwaysUseLatestStep"] = snapToLastCheckbox.checked;
 
+	var stopButton = document.getElementById("stop-btn");
+	stopButton.onclick = function(event) { stopSimulation(context); };
+
 	//Initialize the renderer
 	setStatusMessage("Initializing");
 
 	const uuid = document.getElementById("uuid-field").value;
 
 	render.init(gl, context)
-		.then(() => beginSimulation(context, uuid))
+		.then(() => waitForInitialization(context, uuid))
 		.catch((error) => { console.log(`Error: ${error}`); });
 }
 

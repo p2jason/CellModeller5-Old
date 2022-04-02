@@ -1,25 +1,16 @@
 from django.shortcuts import render
-from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFound
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFound, HttpResponseNotAllowed
 from django.views.decorators.csrf import csrf_exempt
 
 from . import apps
-from .backend.SimulationProcess import spawn_simulation, kill_simulation
+from .backend.SimulationProcess import spawn_simulation, spawn_simulation_from_branch, kill_simulation
 from .backend.SimulationBackend import BackendParameters
 
 from saveviewer import archiver as sv_archiver
 
-import re
 import json
 import uuid
 import traceback
-import random
-
-import asyncio
-import git
-
-class Progress(git.remote.RemoteProgress):
-	def update(self, op_code: int, cur_count: float, max_count: float, message=''):
-		print(self._cur_line)
 
 @csrf_exempt
 def create_new_simulation(request):
@@ -55,7 +46,6 @@ def create_new_simulation(request):
 
 	try:
 		extra_vars = { "backend_version": sim_backend }
-
 		paths = sv_archiver.get_save_archiver().register_simulation(id_str, f"./{id_str}", sim_name, use_custom_backend, extra_init_vars=extra_vars)
 	except Exception as e:
 		traceback.print_exc()
@@ -70,26 +60,22 @@ def create_new_simulation(request):
 	# Download backend
 	params.backend_version = sim_backend
 
-	if use_custom_backend:
-		backend_url = sim_backend.get("url", None)
-		backend_branch = sim_backend.get("branch", None)
-		backend_version = sim_backend.get("version", None)
-
-		if backend_url is None: return HttpResponseBadRequest("Backend URL not provided")
-		if backend_branch is None: return HttpResponseBadRequest("Backend branch not provided")
-		if backend_version is None: return HttpResponseBadRequest("Backend version not provided")
-		
-		git.Repo.clone_from(backend_url, params.backend_dir, branch=backend_branch, progress=Progress())
-	elif not type(sim_backend) is str:
-		return HttpResponseBadRequest(f"Invalid backend data type: {type(sim_backend)}")
+	print(f"[SIMULATION RUNNER]: Creating new simulation: {id_str}")
 	
-	print(f"[Simulation Runner]: Creating new simulation '{id_str}': ")
-
-	# Spawn simulation
-	spawn_simulation(id_str, params)
+	if use_custom_backend:
+		if not "url" in sim_backend: return HttpResponseBadRequest("Backend URL not provided")
+		if not "branch" in sim_backend: return HttpResponseBadRequest("Backend branch not provided")
+		if not "version" in sim_backend: return HttpResponseBadRequest("Backend version not provided")
+		
+		spawn_simulation_from_branch(id_str, params)
+	elif type(sim_backend) is str:
+		spawn_simulation(id_str, params)
+	else:
+		return HttpResponseBadRequest(f"Invalid backend data type: {type(sim_backend)}")
 
 	return HttpResponse(id_str)
 
+@csrf_exempt
 def stop_simulation(request):
 	if not "uuid" in request.GET:
 		return HttpResponseBadRequest("No simulation UUID provided")

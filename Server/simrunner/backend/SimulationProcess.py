@@ -5,6 +5,7 @@ import json
 import sys, io, os
 
 import time
+import git
 
 from .CellModeller4Backend import CellModeller4Backend
 from .DuplexPipeEndpoint import DuplexPipeEndpoint
@@ -170,7 +171,7 @@ def instance_control_thread(pipe, params):
 
 			endpoint.send_item(InstanceMessage("newframe", { "frame_count": frame_count, "new_data": sim_data_str }))
 
-			# The stream won't write the results to a file immediately after getting some data.
+			# NOTE(Jason): The stream won't write the results to a file immediately after getting some data.
 			# If we close Django from the terminal (with Ctrl+C or Ctrl+Break), then the simulation
 			# instance won't be closed properly, and the print output will not be written to the file
 			# To avoid this, we'll manually flush the stream after every frame (we might still loose
@@ -194,13 +195,22 @@ def instance_control_thread(pipe, params):
 
 	log_stream.close()
 
-# Yes, I know that globals are considered bad practice, but I couldn't find another way to do it.
+# NOTE(Jason): Yes, I know that globals are considered bad practice, but I couldn't find another way to do it.
 # This isn't "just some data that you can save in a database", so all solutions that invlove persistent
 # storage or caching are out the window. We also cannot use sessions because they are limited to a single
 # client connection.
 # I'm going to give it a bit of an unorthodox name so that is doesn't get used somewhere else accidentally
 global__active_instances = {}
 global__instance_lock = threading.Lock()
+
+class CloneProgress(git.remote.RemoteProgress):
+	def __init__(self, uuid: str):
+		super().__init__()
+
+		self.sim_uuid = uuid
+
+	def update(self, op_code: int, cur_count: float, max_count: float, message=''):
+		wsgroups.send_message_to_websocket_group(f"initlogs/{self.sim_uuid}", self._cur_line)
 
 def spawn_simulation(uuid: str, params):
 	global global__active_instances
@@ -210,6 +220,34 @@ def spawn_simulation(uuid: str, params):
 
 	with global__instance_lock:
 		global__active_instances[uuid] = SimulationProcess(params)
+
+def __spawn_deferred(uuid: str, params):
+	backend_url = params.backend_version["url"]
+	backend_branch = params.backend_version["branch"]
+
+	print(f"[SIMULATION RUNNER]: Cloning repository ({backend_url} @ {backend_branch}) for simulation: {uuid}")
+	
+	try:
+		time.sleep(1.0)
+		git.Repo.clone_from(backend_url, params.backend_dir, branch=backend_branch, progress=CloneProgress(params.uuid))
+	except Exception as e:
+		print(f"[SIMULATION RUNNER]: Failed to close repository for: {uuid}")
+
+		message = "===== Clone Error =====\n" + str(e)
+		wsgroups.send_message_to_websocket_group(f"initlogs/{params.uuid}", message)
+		wsgroups.close_websocket_group(f"initlogs/{params.uuid}", close_code=4103, close_message=message)
+	else:
+		print(f"[SIMULATION RUNNER]: Completed cloning for simulation: {uuid}")
+
+		spawn_simulation(uuid, params)
+		wsgroups.close_websocket_group(f"initlogs/{params.uuid}")
+
+	return
+
+def spawn_simulation_from_branch(uuid: str, params):
+	wsgroups.create_websocket_group(f"initlogs/{params.uuid}")
+
+	threading.Thread(target=__spawn_deferred, args=(uuid, params), daemon=True).start()
 
 def kill_simulation(uuid: str, remove_only=False):
 	global global__active_instances
