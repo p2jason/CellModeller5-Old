@@ -6,6 +6,7 @@ import io
 import os
 
 from . import archiver as sv_archiver
+from simrunner.backend.SimulationProcess import is_simulation_running
 
 def get_all_simulations(request):
 	archiver = sv_archiver.get_save_archiver()
@@ -35,7 +36,7 @@ def sim_info(request):
 		archiver = sv_archiver.get_save_archiver()
 
 		index_data = archiver.get_sim_index_data(sim_id)
-		is_online = archiver.is_sim_online(sim_id)
+		is_online = is_simulation_running(sim_id)
 	except KeyError:
 		return HttpResponseNotFound(f"No simulation with the UUID '{sim_id}' was found")
 

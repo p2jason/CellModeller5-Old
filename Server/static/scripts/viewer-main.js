@@ -65,7 +65,6 @@ async function waitForInitialization(context, uuid) {
 	};
 	
 	logSocket.onclose = (e) => {
-		console.log(e.code);
 		if (e.code == 4103) {
 			// 
 		} else {

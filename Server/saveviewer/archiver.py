@@ -16,7 +16,6 @@ class SaveArchiver:
 		self.archive_root = "./save-archive/"
 		self.master_path = os.path.join(self.archive_root, "index.json")
 		self.sim_data = {}
-		self.online_sims = set()
 
 		pathlib.Path(self.archive_root).mkdir(parents=False, exist_ok=True)
 
@@ -61,7 +60,6 @@ class SaveArchiver:
 			os.mkdir(backend_path)
 
 		self.sim_data[uuid] = { "frames": {}, "name": name, "num_frames": 0 }
-		self.online_sims.add(uuid)
 
 		if not extra_init_vars is None:
 			self.sim_data[uuid].update(extra_init_vars)
@@ -93,9 +91,6 @@ class SaveArchiver:
 
 	def get_sim_index_data(self, uuid: str):
 		return self.sim_data[uuid]
-
-	def is_sim_online(self, uuid: str):
-		return uuid in self.online_sims
 
 	def get_sim_bin_file(self, uuid: str, index: int):
 		simulation_root = self.master_data["saved_simulations"][uuid]
