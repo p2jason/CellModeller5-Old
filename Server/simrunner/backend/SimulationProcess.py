@@ -4,7 +4,6 @@ import traceback
 import json
 import sys, io, os
 
-import time
 import git
 
 from .CellModeller4Backend import CellModeller4Backend
@@ -23,7 +22,7 @@ class SimulationProcess:
 	def __init__(self, params):
 		self.params = params
 		self.is_alive = True
-		
+
 		# The "spawn" context will start a completely new process of the python
 		# interpeter. This is also the only context type that is supported on both
 		# Unix and Windows systems.
@@ -69,6 +68,8 @@ class SimulationProcess:
 				self.endpoint.send_item(InstanceMessage("stepfileadded", None))
 
 				message_text = json.dumps({ "action": "newframe", "data": { "framecount": frame_count } })
+			elif message.action == "error_message":
+				message_text = json.dumps({ "action": "error_message", "data": str(message.data) }) 
 			elif message.action == "close":
 				self.close()
 
@@ -182,8 +183,8 @@ def instance_control_thread(pipe, params):
 	except Exception as e:
 		exc_message = traceback.format_exc()
 		out_stream.write(exc_message)
-		print(exc_message)
 
+		endpoint.send_item(InstanceMessage("error_message", str(e)))
 		endpoint.send_item(InstanceMessage("close", { "abrupt": True }))
 		endpoint.shutdown()
 
@@ -228,7 +229,6 @@ def __spawn_deferred(uuid: str, params):
 	print(f"[SIMULATION RUNNER]: Cloning repository ({backend_url} @ {backend_branch}) for simulation: {uuid}")
 	
 	try:
-		time.sleep(1.0)
 		git.Repo.clone_from(backend_url, params.backend_dir, branch=backend_branch, progress=CloneProgress(params.uuid))
 	except Exception as e:
 		print(f"[SIMULATION RUNNER]: Failed to close repository for: {uuid}")

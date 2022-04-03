@@ -128,6 +128,8 @@ async function beginSimulation(context, uuid) {
 
 					context["timelineSlider"].value = frameCount;
 				}
+			} else if (message["action"] == "error_message") {
+				console.error(`Simulation error:${message["data"]}`);
 			}
 		};
 		

@@ -32,7 +32,7 @@ def close_websocket_group(group_name: str, close_code=None, close_message=None):
 		# a copy (shallow copy) of the clients list and iterate over that
 		group = global__ws_groups.get(group_name, None)
 
-		if group is None:
+		if (group is None) or (type(group) is __WsGroupCloseMarker):
 			return
 
 		global__ws_groups[group_name] = __WsGroupCloseMarker(close_code, close_message)
