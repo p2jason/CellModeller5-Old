@@ -2,7 +2,7 @@ from channels.generic.websocket import WebsocketConsumer
 import json
 
 from . import websocket_groups as wsgroups
-from .backend.SimulationProcess import is_simulation_running, send_message_to_simulation
+from .instances.manager import is_simulation_running, send_message_to_simulation
 
 class SimCommsConsumer(WebsocketConsumer):
 	def connect(self):

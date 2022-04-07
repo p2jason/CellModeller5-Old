@@ -3,8 +3,10 @@ from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFou
 from django.views.decorators.csrf import csrf_exempt
 
 from . import apps
-from .backend.SimulationProcess import spawn_simulation, spawn_simulation_from_branch, kill_simulation
-from .backend.SimulationBackend import BackendParameters
+
+from .instances.manager import spawn_simulation, spawn_simulation_from_branch, kill_simulation
+from .instances.simprocess import SimulationProcess
+from .backends.backend import BackendParameters
 
 from saveviewer import archiver as sv_archiver
 
@@ -67,9 +69,9 @@ def create_new_simulation(request):
 		if not "branch" in sim_backend: return HttpResponseBadRequest("Backend branch not provided")
 		if not "version" in sim_backend: return HttpResponseBadRequest("Backend version not provided")
 		
-		spawn_simulation_from_branch(id_str, params)
+		spawn_simulation_from_branch(id_str, sim_backend["url"], sim_backend["branch"], paths.backend_path, proc_class=SimulationProcess, proc_args=(params,))
 	elif type(sim_backend) is str:
-		spawn_simulation(id_str, params)
+		spawn_simulation(id_str, proc_class=SimulationProcess, proc_args=(params,))
 	else:
 		return HttpResponseBadRequest(f"Invalid backend data type: {type(sim_backend)}")
 

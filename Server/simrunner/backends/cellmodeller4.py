@@ -1,6 +1,6 @@
 import os
 
-from .SimulationBackend import SimulationBackend
+from .backend import SimulationBackend
 
 import CellModeller as CellModeller4
 

@@ -2,7 +2,6 @@ import os
 import json
 import pathlib
 
-
 class ArchivePaths:
 	def __init__(self):
 		self.root_path = None

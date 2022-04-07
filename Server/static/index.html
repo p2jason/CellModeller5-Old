@@ -30,7 +30,7 @@
 				return response.text();
 			})
 			.then((uuid) => {
-				window.location.href = `http://localhost:8000/view/${uuid}`;
+				window.location.href = `http://localhost:8000/view/${uuid}/`;
 			})
 			.catch((error) => {
 				console.log(`Error when creating new simulation: ${error}`)
@@ -39,8 +39,8 @@
 	</script>
 </head>
 <body>
-	<form id="create-sim-form" onsubmit="submitCreateForm()" method="post">
-		<button type="submit">Create</button>
+	<form id="create-sim-form" onsubmit="submitCreateForm()">
 	</form>
+	<button type="submit" onclick="submitCreateForm()">Create</button>
 </body>
 </html>
