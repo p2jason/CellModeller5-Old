@@ -33,7 +33,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
-	'debugservlet.apps.DeebugServletAppConfig',
+	'debugservlet.apps.DebugServletAppConfig',
 	'django.contrib.auth',
 	'django.contrib.contenttypes',
 	'django.contrib.messages',
@@ -72,6 +72,25 @@ TEMPLATES = [
 WSGI_APPLICATION = 'debugservlet.wsgi.application'
 ASGI_APPLICATION = 'debugservlet.asgi.application'
 
+
+# Logging
+# https://docs.djangoproject.com/en/3.2/topics/logging/
+
+LOGGING = {
+	'version': 1,
+	'disable_existing_loggers': False,
+	'handlers': {
+		'console': {
+			'class': 'logging.StreamHandler',
+		}
+	},
+	'loggers': {
+		'django': {
+			'handlers': [ 'console' ],
+			'level': 'WARNING',
+		}
+	}
+}
 
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases

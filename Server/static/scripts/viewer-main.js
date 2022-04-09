@@ -107,11 +107,10 @@ async function beginSimulation(context, uuid) {
 		
 		setStatusMessage("Conneceting");
 
-		var commsSocket = new WebSocket(`ws://${window.location.host}/ws/simcomms/${uuid}`);
-			
-		commsSocket.onopen = (e) => setStatusMessage("Running");
+		context["commsSocket"] = new WebSocket(`ws://${window.location.host}/ws/simcomms/${uuid}`);
+		context["commsSocket"].onopen = (e) => setStatusMessage("Running");
 		
-		commsSocket.onmessage = function(e) {
+		context["commsSocket"].onmessage = function(e) {
 			const message = JSON.parse(e.data);
 
 			if (message["action"] == "newframe") {
@@ -132,7 +131,18 @@ async function beginSimulation(context, uuid) {
 			}
 		};
 		
-		commsSocket.onclose = (e) => setStatusMessage("Terminated");
+		context["commsSocket"].onclose = function(e) {
+			setStatusMessage("Terminated");
+
+			context["commsSocket"] = null;
+		};
+	}
+}
+
+function recompileDevSimulation(context) {
+	console.log(context["commsSocket"])
+	if (context["commsSocket"] !== null) {
+		context["commsSocket"].send(`{ "action": "recompiledev" }`)
 	}
 }
 
@@ -198,8 +208,8 @@ function initFrame(gl, context) {
 
 	context["alwaysUseLatestStep"] = snapToLastCheckbox.checked;
 
-	var stopButton = document.getElementById("stop-btn");
-	stopButton.onclick = function(event) { stopSimulation(context); };
+	document.getElementById("recompile-btn").onclick = function(event) { recompileDevSimulation(context); };
+	document.getElementById("stop-btn").onclick = function(event) { stopSimulation(context); };
 
 	//Initialize the renderer
 	setStatusMessage("Initializing");

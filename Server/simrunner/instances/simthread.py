@@ -2,18 +2,28 @@ import threading
 import traceback
 import os
 import json
+import queue
 
 from .manager import ISimulationInstance, kill_simulation
 
 from simrunner.backends.cellmodeller4 import CellModeller4Backend
 from saveviewer import archiver as sv_archiver
 
+from enum import Enum
+
+class InstanceAction(Enum):
+	START = 1
+	STOP = 2
+
 class SimulationThread(ISimulationInstance):
 	def __init__(self, params):
 		super(SimulationThread, self).__init__(params.uuid)
 		self.params = params
+		self.recompile_callback = recompile_callback
 
-		self.thread = threading.Thread(target=instance_control_thread, args=(params, self.send_item_to_clients), daemon=True)
+		self.msg_queue = queue.Queue()
+
+		self.thread = threading.Thread(target=instance_control_thread, args=(params, self.msg_queue, self.send_item_to_clients), daemon=True)
 		self.thread.start()
 
 	def send_item_to_instance(self, item):
@@ -21,10 +31,13 @@ class SimulationThread(ISimulationInstance):
 
 	def close(self):
 		super().close()
+		
+		self.msg_queue.put(InstanceAction.STOP)
 
-		self.thread.join()
+		# NOTE(Jason): I don't think there is a reason for us to join the threads
+		# self.thread.join()
 
-def instance_control_thread(params, send_func):
+def instance_control_thread(params, msg_queue, send_func):
 	running = True
 
 	try:
@@ -32,6 +45,23 @@ def instance_control_thread(params, send_func):
 		backend.initialize()
 
 		while running:
+			# Process incoming messages
+			try:
+				while running:
+					item = msg_queue.get_nowait()
+
+					if item is InstanceAction.STOP:
+						running = False
+					
+					msg_queue.task_done()
+
+				if not running:
+					break
+			except queue.Empty as e:
+				# Apparently, people just use exceptions for everything now, even to just
+				# tell you that a queue is empty
+				pass
+
 			# Take another step in the simulation
 			backend.step()
 
@@ -51,3 +81,5 @@ def instance_control_thread(params, send_func):
 		backend.shutdown()
 	except Exception as e:
 		traceback.print_exc()
+
+	kill_simulation(params.uuid, True)

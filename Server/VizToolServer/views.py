@@ -14,7 +14,7 @@ def viewer(request, sim_uuid):
 	with open("static/viewer.html", "r") as index_file:
 		index_data = index_file.read()
 
-	context = Context({ "simulation_uuid": sim_uuid })
+	context = Context({ "simulation_uuid": sim_uuid, "is_dev_sim": False })
 	content = Template(index_data).render(context)
 
 	return HttpResponse(content)

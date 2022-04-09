@@ -110,5 +110,12 @@ def send_message_to_simulation(uuid: str, message):
 	global global__active_instances
 	global global__instance_lock
 
+	# NOTE(Jason): Originally, the message was sent to the simulation while the lock
+	# was still acquired. I changed it because it caused some problems with 'simthread'.
+	# There is a slight chance that this could cause an issue (e.g. if someone closes but before
+	# the simulation instance after the instance is retreived from 'global__active_instances',
+	# 'send_item_to_instance' is invoked), but I think its highly unlikely that it will happen.
 	with global__instance_lock:
-		global__active_instances[uuid].send_item_to_instance(message)
+		sim_instance = global__active_instances[uuid]
+	
+	sim_instance.send_item_to_instance(message)

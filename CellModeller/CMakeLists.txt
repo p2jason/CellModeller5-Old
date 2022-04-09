@@ -51,7 +51,7 @@ endif()
 
 file(GLOB_RECURSE SOURCE_FILES "${PROJECT_SOURCE_DIR}/src/*.cpp" "${PROJECT_SOURCE_DIR}/src/*.h")
 
-add_executable(${PROJECT_NAME} ${SOURCE_FILES})
+pybind11_add_module(${PROJECT_NAME} ${SOURCE_FILES})
 
 include_directories("${PROJECT_SOURCE_DIR}/src/")
 
@@ -63,8 +63,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE SPIRV)
 target_include_directories(${PROJECT_NAME} PUBLIC src)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${GLOBAL_DEFINES})
-
-# pybind11_add_module(example ${SOURCE_FILES})
 
 ############ Setup IDE filters ############
 macro(ConvertToFilters curdir)
