@@ -6,7 +6,7 @@ import queue
 
 from .manager import ISimulationInstance, kill_simulation
 
-from simrunner.backends.cellmodeller4 import CellModeller4Backend
+from simrunner.backends.cellmodeller5 import CellModeller5Backend
 from saveviewer import archiver as sv_archiver
 
 from enum import Enum
@@ -19,8 +19,7 @@ class SimulationThread(ISimulationInstance):
 	def __init__(self, params):
 		super(SimulationThread, self).__init__(params.uuid)
 		self.params = params
-		self.recompile_callback = recompile_callback
-
+		
 		self.msg_queue = queue.Queue()
 
 		self.thread = threading.Thread(target=instance_control_thread, args=(params, self.msg_queue, self.send_item_to_clients), daemon=True)
@@ -41,7 +40,7 @@ def instance_control_thread(params, msg_queue, send_func):
 	running = True
 
 	try:
-		backend = CellModeller4Backend(params)
+		backend = CellModeller5Backend(params)
 		backend.initialize()
 
 		while running:

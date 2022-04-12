@@ -208,7 +208,7 @@ function initFrame(gl, context) {
 
 	context["alwaysUseLatestStep"] = snapToLastCheckbox.checked;
 
-	document.getElementById("recompile-btn").onclick = function(event) { recompileDevSimulation(context); };
+	//document.getElementById("recompile-btn").onclick = function(event) { recompileDevSimulation(context); };
 	document.getElementById("stop-btn").onclick = function(event) { stopSimulation(context); };
 
 	//Initialize the renderer

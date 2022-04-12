@@ -62,12 +62,12 @@ async function loadBacteriumModel(gltf, gl, context) {
 
 	const positionAccessor = gltf.accessors[primitives.attributes["POSITION"]];
 	const normalAccessor = gltf.accessors[primitives.attributes["NORMAL"]];
-	const weightAccessor = gltf.accessors[primitives.attributes["WEIGHTS_0"]];
+	const texCoordsAccessor = gltf.accessors[primitives.attributes["TEXCOORD_0"]];
 	const indexAccessor = gltf.accessors[primitives.indices];
 
 	console.assert(positionAccessor.type == "VEC3", "Vertex positions must be Vec3");
 	console.assert(normalAccessor.type == "VEC3", "Vertex normals must be Vec3");
-	console.assert(weightAccessor.type == "VEC4", "Vertex weights must be Vec4");
+	console.assert(texCoordsAccessor.type == "VEC2", "Vertex UVs must be Vec2");
 	console.assert(indexAccessor.type == "SCALAR", "Mesh indices must be scalars");
 
 	//Load buffers
@@ -144,7 +144,7 @@ async function loadBacteriumModel(gltf, gl, context) {
 	//Vertex attributes
 	createVertexAttribute(gl, gl.ARRAY_BUFFER, 0, positionAccessor);
 	createVertexAttribute(gl, gl.ARRAY_BUFFER, 1, normalAccessor);
-	createVertexAttribute(gl, gl.ARRAY_BUFFER, 2, weightAccessor);
+	createVertexAttribute(gl, gl.ARRAY_BUFFER, 2, texCoordsAccessor);
 
 	//Instance attributes
 	const instanceStride = 9 * 4;

@@ -5,7 +5,7 @@
 
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec3 a_Normal;
-layout(location = 2) in vec4 a_Weight;
+layout(location = 2) in vec2 a_TexCoords;
 
 layout(location = 3) in vec3 a_CellPos;
 layout(location = 4) in vec3 a_CellDir;
@@ -39,19 +39,24 @@ void main() {
 	);
 
 	//Transform vertex position to world space
-	mat4 modelMatrix = mat4(rotMatrix * mat3(a_Radius));
+	mat3 scaleMatrix = mat3(1.0);
+	scaleMatrix[0][0] = a_Radius;
+	scaleMatrix[1][1] = 0.5;
+	scaleMatrix[2][2] = a_Radius;
+
+	mat4 modelMatrix = mat4(rotMatrix * scaleMatrix);
 	modelMatrix[3] = vec4(a_CellPos, 1.0);
 
 	vec3 position = a_Position;
-	position.y += mix(-1.0, 1.0, a_Weight.x) * (a_Length - 1.0);
+	position.y += mix(-1.0, 1.0, a_TexCoords.x) * (a_Length - 1.0);
 
 	vec4 worldPos = modelMatrix * vec4(position, 1.0);
 	
 	//Write varyings
 	gl_Position = u_MvpMatrix * worldPos;
 
-	v_CellEnd0 = vec3(modelMatrix * vec4(0.0,  a_Length, 0.0, 1.0));
-	v_CellEnd1 = vec3(modelMatrix * vec4(0.0, -a_Length, 0.0, 1.0));
+	v_CellEnd0 = vec3(modelMatrix * vec4(0.0,  a_Length - 1.0, 0.0, 1.0));
+	v_CellEnd1 = vec3(modelMatrix * vec4(0.0, -a_Length + 1.0, 0.0, 1.0));
 
 	v_WorldPos = worldPos.xyz;
 //	v_Normal = rotMatrix * a_Normal;

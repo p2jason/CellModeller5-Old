@@ -22,16 +22,20 @@ float lineSegmentDistance(vec3 a0, vec3 a1, vec3 b0, vec3 b1) {
 	vec3 A = a1 - a0;
 	vec3 B = b1 - b0;
 	
+	vec3 t = b0 - a0;
+	
 	float magA = length(A);
 	float magB = length(B);
 	
+	if (magB < 0.001) {
+		return distance(t, (dot(A, t) / dot(A, A)) * A);
+	}
+
 	vec3 _A = A / magA;
 	vec3 _B = B / magB;
 	
 	vec3 crs = cross(_A, _B);
 	float denom = dot(crs, crs);
-	
-	vec3 t = b0 - a0;
 	
 	float detA = determinant(mat3(t, _B, crs));
 	float detB = determinant(mat3(t, _A, crs));

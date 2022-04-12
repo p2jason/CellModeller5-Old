@@ -1,5 +1,3 @@
-import os
-
 from .backend import SimulationBackend
 
 import CellModeller as CellModeller4
@@ -69,12 +67,12 @@ class CellModeller4Backend(SimulationBackend):
 
 			byte_buffer.write(struct.pack("fff", state.pos[0], state.pos[2], state.pos[1]))
 			byte_buffer.write(struct.pack("fff", state.dir[0], state.dir[2], state.dir[1]))
-			byte_buffer.write(struct.pack("ffI", state.length, state.radius, packed_color))
+			byte_buffer.write(struct.pack("ffI", state.length + 1.0, state.radius, packed_color))
 
 		with open(viz_bin_path, "wb") as out_file:
 			out_file.write(byte_buffer.getbuffer())
 
-		return pickle_path, cached_file_relative
+		return pickle_file_relative, cached_file_relative
 
 	def shutdown(self):
 		del self.simulation

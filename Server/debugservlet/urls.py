@@ -5,6 +5,7 @@ from . import views
 
 urlpatterns = [
 	path("", views.index),
-	path("api/saveviewer/", include("saveviewer.urls")),
-	path("api/simrunner/", include("simrunner.urls")),
+	path("api/saveviewer/framedata", views.frame_data),
+	path("api/saveviewer/simulationinfo", views.sim_info),
+	path("api/simrunner/stopsimulation", views.stop_simulation),
 ]
