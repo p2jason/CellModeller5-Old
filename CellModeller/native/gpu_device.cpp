@@ -311,6 +311,54 @@ void deinitGPUDevice(GPUDevice& device)
 	vkDestroyDevice(device.device, nullptr);
 }
 
+static Result<uint32_t> findMemoryTypeIndex(GPUDevice& device, uint32_t typeBits, VkMemoryPropertyFlags properties)
+{
+	const VkPhysicalDeviceMemoryProperties& memProperties = device.memoryProperties;
+
+	for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i)
+	{
+		if (typeBits & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+		{
+			return Result<uint32_t>(i);
+		}
+	}
+
+	return CM_ERROR_MESSAGE("Could not find appropriate memory type");
+}
+
+Result<GPUBuffer> createGPUBuffer(GPUDevice& device, uint64_t size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProperties)
+{
+	GPUBuffer buffer = {};
+
+	VkBufferCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	createInfo.size = size;
+	createInfo.usage = usage;
+	createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	createInfo.queueFamilyIndexCount = 0;
+	createInfo.pQueueFamilyIndices = nullptr;
+
+	VK_THROW(vkCreateBuffer(device.device, &createInfo, nullptr, &buffer.buffer));
+
+	VkMemoryRequirements requirements = {};
+	vkGetBufferMemoryRequirements(device.device, buffer.buffer, &requirements);
+
+	VkMemoryAllocateInfo allocateInfo = {};
+	allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocateInfo.allocationSize = requirements.size;	
+	CM_TRY(allocateInfo.memoryTypeIndex, findMemoryTypeIndex(device, requirements.memoryTypeBits, memProperties));
+
+	VK_THROW(vkAllocateMemory(device.device, &allocateInfo, nullptr, &buffer.memory));
+
+	return Result<GPUBuffer>(buffer);
+}
+
+void destroyGPUBuffer(GPUDevice& device, GPUBuffer& buffer)
+{
+	if (buffer.buffer != VK_NULL_HANDLE) vkDestroyBuffer(device.device, buffer.buffer, nullptr);
+	if (buffer.memory != VK_NULL_HANDLE) vkFreeMemory(device.device, buffer.memory, nullptr);
+}
+
 Result<ShaderPipeline> createShaderPipeline(GPUDevice& device, const CompiledShader& compiledShader, const PipelineParameters& params)
 {
 	ShaderPipeline pipeline;

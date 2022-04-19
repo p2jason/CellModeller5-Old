@@ -53,11 +53,20 @@ struct PipelineParameters
 	std::vector<VkPushConstantRange> pushConstans;
 };
 
+struct GPUBuffer
+{
+	VkBuffer buffer = VK_NULL_HANDLE;
+	VkDeviceMemory memory = VK_NULL_HANDLE;
+};
+
 Result<void> initGPUContext(GPUContext* context, bool withDebug = false);
 void deinitGPUContext(GPUContext& context);
 
 Result<void> initGPUDevice(GPUDevice* device, GPUContext& context);
 void deinitGPUDevice(GPUDevice& device);
+
+Result<GPUBuffer> createGPUBuffer(GPUDevice& device, uint64_t size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProperties);
+void destroyGPUBuffer(GPUDevice& device, GPUBuffer& buffer);
 
 Result<ShaderPipeline> createShaderPipeline(GPUDevice& device, const CompiledShader& compiledShader, const PipelineParameters& params);
 void destroyShaderPipeline(GPUDevice& device, const ShaderPipeline& shader);

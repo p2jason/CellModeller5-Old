@@ -49,20 +49,39 @@ elseif()
    # Other platforms
 endif()
 
-file(GLOB_RECURSE SOURCE_FILES "${PROJECT_SOURCE_DIR}/src/*.cpp" "${PROJECT_SOURCE_DIR}/src/*.h")
+file(GLOB_RECURSE SOURCE_FILES "${PROJECT_SOURCE_DIR}/native/*.cpp" "${PROJECT_SOURCE_DIR}/native/*.h")
 
-pybind11_add_module(${PROJECT_NAME} ${SOURCE_FILES})
+if (NOT CELLMODELLER_PYTHON_MODULE_NAME)
+	set(CELLMODELLER_PYTHON_MODULE_NAME "native")
+endif()
+
+if (NOT CELLMODELLER_ARTIFACT_NAME)
+	set(CELLMODELLER_ARTIFACT_NAME "native")
+endif()
+
+if (NOT CELLMODELLER_ARTIFACT_SUFFIX)
+	set(CELLMODELLER_ARTIFACT_SUFFIX ".pyd")
+endif()
+
+# Just so we don't have to type the whole name every time
+set(MODULE_NAME ${CELLMODELLER_PYTHON_MODULE_NAME})
+
+pybind11_add_module(${MODULE_NAME} ${SOURCE_FILES})
 
 include_directories("${PROJECT_SOURCE_DIR}/src/")
 
-target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan-Headers)
-target_link_libraries(${PROJECT_NAME} PRIVATE volk)
-target_link_libraries(${PROJECT_NAME} PRIVATE glslang)
-target_link_libraries(${PROJECT_NAME} PRIVATE SPIRV)
+target_link_libraries(${MODULE_NAME} PRIVATE Vulkan-Headers)
+target_link_libraries(${MODULE_NAME} PRIVATE volk)
+target_link_libraries(${MODULE_NAME} PRIVATE glslang)
+target_link_libraries(${MODULE_NAME} PRIVATE SPIRV)
 
-target_include_directories(${PROJECT_NAME} PUBLIC src)
+target_include_directories(${MODULE_NAME} PUBLIC src)
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE ${GLOBAL_DEFINES})
+target_compile_definitions(${MODULE_NAME} PRIVATE ${GLOBAL_DEFINES})
+target_compile_definitions(${MODULE_NAME} PRIVATE CM_MODULE_NAME=${MODULE_NAME})
+
+set_target_properties(${MODULE_NAME} PROPERTIES OUTPUT_NAME ${CELLMODELLER_ARTIFACT_NAME})
+set_target_properties(${MODULE_NAME} PROPERTIES SUFFIX ${CELLMODELLER_ARTIFACT_SUFFIX})
 
 ############ Setup IDE filters ############
 macro(ConvertToFilters curdir)

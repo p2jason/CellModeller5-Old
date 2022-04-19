@@ -49,9 +49,13 @@ public:
 #define CM_TRY(store, ...)	\
 auto CM_COMBIME(result__, __LINE__) = (__VA_ARGS__);	\
 CM_PROPAGATE_ERROR(CM_COMBIME(result__, __LINE__));	\
-auto& store = CM_RESULT_VALUE(CM_COMBIME(result__, __LINE__));
+store = CM_RESULT_VALUE(CM_COMBIME(result__, __LINE__));
+
+#define CM_TRY_V(...) CM_TRY(auto& _, __VA_ARGS__)
 
 #define CM_TRY_THROW(store, ...)	\
 auto CM_COMBIME(result__, __LINE__) = (__VA_ARGS__);	\
 CM_THROW_ERROR(CM_COMBIME(result__, __LINE__));	\
-auto& store = CM_RESULT_VALUE(CM_COMBIME(result__, __LINE__));
+store = CM_RESULT_VALUE(CM_COMBIME(result__, __LINE__));
+
+#define CM_TRY_THROW_V(...) CM_TRY_THROW(auto& _, __VA_ARGS__)
