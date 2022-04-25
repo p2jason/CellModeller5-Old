@@ -8,25 +8,28 @@
 #error A module name must be provided!
 #endif
 
+namespace py = pybind11;
+
 class SimulatorInterface
 {
 private:
 	Simulator* m_simulator = nullptr;
 public:
-	SimulatorInterface() :
+	SimulatorInterface(const py::object& loadShaderCallback) :
 		m_simulator(new Simulator())
 	{
-		//TODO: Move outside of class
+		auto importCallback = [&](const std::string& path)
+		{
+			return py::cast<std::string>(loadShaderCallback(path));
+		};
 
 		CM_TRY_THROW_V(initSimulator(m_simulator, true));
+		CM_TRY_THROW_V(importShaders(*m_simulator, importCallback));
 	}
 
 	~SimulatorInterface()
 	{
 		deinitSimulator(*m_simulator);
-
-		//TODO: Move outside of class
-		
 	}
 
 	void step()
@@ -36,40 +39,27 @@ public:
 
 	void dumpToStepFile(std::string filepath)
 	{
-		CM_TRY_THROW_V(writeSimlatorStateToStepFile(*m_simulator, filepath));
+		CM_TRY_THROW_V(writeSimulatorStateToStepFile(*m_simulator, filepath));
 	}
 
 	void dumpToVizFile(std::string filepath)
 	{
-		CM_TRY_THROW_V(writeSimlatorStateToVizFile(*m_simulator, filepath));
+		CM_TRY_THROW_V(writeSimulatorStateToVizFile(*m_simulator, filepath));
 	}
-
-	int getStepIndex() const { return m_simulator->stepIndex; }
 };
 
-void initializeModule()
-{
+PYBIND11_MODULE(CM_MODULE_NAME, m) {
+	// Initialize the shader compiler
 	if (!startupShaderCompiler())
 	{
 		throw std::exception("Failed to initialize shader compiler");
 	}
-}
 
-void shutdownModule()
-{
-	terminateShaderCompiler();
-}
-
-namespace py = pybind11;
-
-PYBIND11_MODULE(CM_MODULE_NAME, m) {
-	m.def("initialize_module", &initializeModule);
-	m.def("shutdown_module", &shutdownModule);
+	//terminateShaderCompiler();
 
 	py::class_<SimulatorInterface>(m, "NativeSimulator")
-		.def(py::init<>())
+		.def(py::init<const py::object&>())
 		.def("step", &SimulatorInterface::step)
 		.def("dump_to_step_file", &SimulatorInterface::dumpToStepFile)
-		.def("dump_to_viz_file", &SimulatorInterface::dumpToVizFile)
-		.def("get_step_index", &SimulatorInterface::getStepIndex);
+		.def("dump_to_viz_file", &SimulatorInterface::dumpToVizFile);
 }

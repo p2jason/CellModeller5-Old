@@ -28,5 +28,8 @@ class SimulationBackend:
 	def write_step_pickle(self):
 		return ""
 
+	def is_running(self):
+		return True
+
 	def shutdown(self):
 		pass

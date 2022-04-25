@@ -8,8 +8,6 @@ from saveviewer import archiver as sv_archiver
 
 import uuid
 
-DUMMY_UUID = "00000000-0000-0000-0000-000000000000"
-
 class DebugServletAppConfig(AppConfig):
 	name = "debugservlet"
 	verbose_name = "Debug Servlet for CellModeller5"

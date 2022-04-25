@@ -147,3 +147,6 @@ STATICFILES_DIRS = [
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 mimetypes.add_type("application/javascript", ".js", True)
+
+# Debug servet settings
+DUMMY_UUID = "00000000-0000-0000-0000-000000000000"

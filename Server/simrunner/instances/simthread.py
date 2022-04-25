@@ -43,7 +43,7 @@ def instance_control_thread(params, msg_queue, send_func):
 		backend = CellModeller5Backend(params)
 		backend.initialize()
 
-		while running:
+		while running and backend.is_running():
 			# Process incoming messages
 			try:
 				while running:

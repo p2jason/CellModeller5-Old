@@ -349,6 +349,7 @@ Result<GPUBuffer> createGPUBuffer(GPUDevice& device, uint64_t size, VkBufferUsag
 	CM_TRY(allocateInfo.memoryTypeIndex, findMemoryTypeIndex(device, requirements.memoryTypeBits, memProperties));
 
 	VK_THROW(vkAllocateMemory(device.device, &allocateInfo, nullptr, &buffer.memory));
+	VK_THROW(vkBindBufferMemory(device.device, buffer.buffer, buffer.memory, 0));
 
 	return Result<GPUBuffer>(buffer);
 }

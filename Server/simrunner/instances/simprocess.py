@@ -159,7 +159,7 @@ def instance_control_thread(pipe, params):
 		backend = CellModeller4Backend(params)
 		backend.initialize()
 
-		while running:
+		while running and backend.is_running():
 			# Take another step in the simulation
 			backend.step()
 

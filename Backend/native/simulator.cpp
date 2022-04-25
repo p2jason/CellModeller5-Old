@@ -3,6 +3,7 @@
 #include "shader_compiler.h"
 
 #include <fstream>
+#include <iostream>
 
 #include <thread>
 #include <chrono>
@@ -13,47 +14,16 @@ static void freeCPUState(Simulator::CPUState& state);
 static Result<Simulator::GPUState> allocateNewGPUState(Simulator& simulator, uint32_t size);
 static void freeGPUState(Simulator& simulator, Simulator::GPUState& state);
 
-const char* COLLISION_SHADER = R"Boo(#version 450
-
-layout(set = 0, binding = 0) readonly buffer Positions {
-	vec3[] positions;
-};
-
-layout(set = 0, binding = 1) readonly buffer Rotations {
-	vec2[] rotations;
-};
-
-layout(set = 0, binding = 2) readonly buffer Sizes {
-	vec2[] sizes;
-};
-
-void main() {
-	
-}
-
-)Boo";
-
 Result<void> initSimulator(Simulator* simulator, bool withDebug)
 {
 	CM_PROPAGATE_ERROR(initGPUContext(&simulator->gpuContext, withDebug));
 	CM_PROPAGATE_ERROR(initGPUDevice(&simulator->gpuDevice, simulator->gpuContext));
-
-	startupShaderCompiler();
 
 	//Create fence for waiting on queue submissions
 	VkFenceCreateInfo fenceCI = {};
 	fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 
 	VK_THROW(vkCreateFence(simulator->gpuDevice.device, &fenceCI, nullptr, &simulator->submitFinishedFence));
-
-	//Create pipelines
-	PipelineParameters pipelineParams = {};
-	pipelineParams.descriptorBindings.push_back(VkDescriptorSetLayoutBinding{ 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
-
-	pipelineParams.pushConstans.push_back(VkPushConstantRange{ VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t) });
-
-	CM_TRY(auto& collisionShader, compileShaderSpirV(COLLISION_SHADER, "collision_shader"));
-	CM_TRY(auto& shaderPipeline, createShaderPipeline(simulator->gpuDevice, collisionShader, pipelineParams));
 
 	//Print details
 	const VkPhysicalDeviceProperties& properties = simulator->gpuDevice.properties;
@@ -65,8 +35,10 @@ Result<void> initSimulator(Simulator* simulator, bool withDebug)
 										  VK_API_VERSION_PATCH(properties.apiVersion));
 
 	//Set the initial state of the simulation
-	simulator->cpuState = allocateNewCPUState(1024);
-	CM_TRY(simulator->gpuState, allocateNewGPUState(*simulator, 1024));
+	simulator->cellCapacity = 1024;
+
+	simulator->cpuState = allocateNewCPUState(simulator->cellCapacity);
+	CM_TRY(simulator->gpuState, allocateNewGPUState(*simulator, simulator->cellCapacity));
 
 	for (int i = 0; i < 11; ++i)
 	{
@@ -81,9 +53,59 @@ Result<void> initSimulator(Simulator* simulator, bool withDebug)
 	return Result<void>();
 }
 
+Result<void> importShaders(Simulator& simulator, ShaderImportCallback importCallback)
+{
+	//Create a single descriptor pool for all the shaders
+	VkDevice deviceHandle = simulator.gpuDevice.device;
+
+	VkDescriptorPoolSize poolSizes[1] = {};
+	poolSizes[0] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3 };
+
+	VkDescriptorPoolCreateInfo poolCI = {};
+	poolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolCI.maxSets = 1;
+	poolCI.poolSizeCount = sizeof(poolSizes) / sizeof(poolSizes[0]);
+	poolCI.pPoolSizes = poolSizes;
+
+	VK_THROW(vkCreateDescriptorPool(deviceHandle, &poolCI, nullptr, &simulator.descriptorPool));
+
+	/*********** Collision detection shader ***********/
+	PipelineParameters params = {};
+	params.descriptorBindings.push_back({ 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
+	params.descriptorBindings.push_back({ 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
+	params.descriptorBindings.push_back({ 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
+
+	params.pushConstans.push_back({ VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t) });
+
+	CM_TRY(auto& compiled, compileShaderSpirV(importCallback("shaders/collision_shader.glsl"), "shaders/collision_shader.glsl"));
+	CM_TRY(simulator.collisionShader, createShaderPipeline(simulator.gpuDevice, compiled, params));
+
+	VkDescriptorSetAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	allocInfo.descriptorPool = simulator.descriptorPool;
+	allocInfo.descriptorSetCount = 1;
+	allocInfo.pSetLayouts = &simulator.collisionShader.descSetLayout;
+
+	VK_THROW(vkAllocateDescriptorSets(deviceHandle, &allocInfo, &simulator.collisionShaderDescSet));
+
+	return Result<void>();
+}
+
 void deinitSimulator(Simulator& simulator)
 {
-	vkDestroyFence(simulator.gpuDevice.device, simulator.submitFinishedFence, nullptr);
+	VkDevice deviceHandle = simulator.gpuDevice.device;
+
+	if (simulator.descriptorPool != VK_NULL_HANDLE)
+	{
+		vkDestroyDescriptorPool(deviceHandle, simulator.descriptorPool, nullptr);
+	}
+
+	destroyShaderPipeline(simulator.gpuDevice, simulator.collisionShader);
+
+	if (simulator.submitFinishedFence != VK_NULL_HANDLE)
+	{
+		vkDestroyFence(deviceHandle, simulator.submitFinishedFence, nullptr);
+	}
 
 	freeCPUState(simulator.cpuState);
 	freeGPUState(simulator, simulator.gpuState);
@@ -92,17 +114,64 @@ void deinitSimulator(Simulator& simulator)
 	deinitGPUContext(simulator.gpuContext);
 }
 
+static uint32_t workgroupCount(uint32_t threadCount, uint32_t groupSize)
+{
+	uint32_t m = threadCount % groupSize;
+	return (m ? (threadCount + groupSize - m) : threadCount) / groupSize;
+}
+
 Result<void> stepSimulator(Simulator& simulator)
 {
-	simulator.stepIndex++;
-
-	//Temp:
-	if (simulator.stepIndex > 5) return CM_ERROR_MESSAGE("No Frodo for you!");
-
 	GPUDevice& device = simulator.gpuDevice;
 
 	VK_THROW(vkResetCommandPool(device.device, device.commandPool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT));
 
+	///////////////////////////////////////////////////////////////
+	// Update descriptor sets
+	///////////////////////////////////////////////////////////////
+	VkDescriptorBufferInfo bufferWriteInfos[3] = {};
+	bufferWriteInfos[0].buffer = simulator.gpuState.positions.buffer;
+	bufferWriteInfos[0].offset = 0;
+	bufferWriteInfos[0].range = simulator.cellCount * sizeof(vec3);
+
+	bufferWriteInfos[1].buffer = simulator.gpuState.rotations.buffer;
+	bufferWriteInfos[1].offset = 0;
+	bufferWriteInfos[1].range = simulator.cellCount * sizeof(vec2);
+
+	bufferWriteInfos[2].buffer = simulator.gpuState.sizes.buffer;
+	bufferWriteInfos[2].offset = 0;
+	bufferWriteInfos[2].range = simulator.cellCount * sizeof(vec2);
+
+	VkWriteDescriptorSet descSetWrites[3] = {};
+	descSetWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descSetWrites[0].dstSet = simulator.collisionShaderDescSet;
+	descSetWrites[0].dstBinding = 0;
+	descSetWrites[0].dstArrayElement = 0;
+	descSetWrites[0].descriptorCount = 1;
+	descSetWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	descSetWrites[0].pBufferInfo = &bufferWriteInfos[0];
+
+	descSetWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descSetWrites[1].dstSet = simulator.collisionShaderDescSet;
+	descSetWrites[1].dstBinding = 1;
+	descSetWrites[1].dstArrayElement = 0;
+	descSetWrites[1].descriptorCount = 1;
+	descSetWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	descSetWrites[1].pBufferInfo = &bufferWriteInfos[1];
+
+	descSetWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descSetWrites[2].dstSet = simulator.collisionShaderDescSet;
+	descSetWrites[2].dstBinding = 2;
+	descSetWrites[2].dstArrayElement = 0;
+	descSetWrites[2].descriptorCount = 1;
+	descSetWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	descSetWrites[2].pBufferInfo = &bufferWriteInfos[2];
+
+	vkUpdateDescriptorSets(device.device, sizeof(descSetWrites) / sizeof(descSetWrites[0]), descSetWrites, 0, nullptr);
+
+	///////////////////////////////////////////////////////////////
+	// Perform a step
+	///////////////////////////////////////////////////////////////
 	VkCommandBufferBeginInfo beginInfo = {};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	beginInfo.pInheritanceInfo = nullptr;
@@ -110,7 +179,13 @@ Result<void> stepSimulator(Simulator& simulator)
 
 	VK_THROW(vkBeginCommandBuffer(device.commandBuffer, &beginInfo));
 
+	// Run collision detection and accumulate forces
+	vkCmdBindPipeline(device.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, simulator.collisionShader.pipeline);
+	vkCmdBindDescriptorSets(device.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, simulator.collisionShader.pipelineLayout, 0, 1, &simulator.collisionShaderDescSet, 0, nullptr);
 	
+	vkCmdPushConstants(device.commandBuffer, simulator.collisionShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &simulator.cellCount);
+
+	vkCmdDispatch(device.commandBuffer, workgroupCount(simulator.cellCount, 64), 1, 1);
 
 	VK_THROW(vkEndCommandBuffer(device.commandBuffer));
 
@@ -118,7 +193,7 @@ Result<void> stepSimulator(Simulator& simulator)
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submitInfo.waitSemaphoreCount = 0;
 	submitInfo.pWaitSemaphores = nullptr;
-	submitInfo.pWaitSemaphores = nullptr;
+	submitInfo.pWaitDstStageMask = nullptr;
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &device.commandBuffer;
 	submitInfo.signalSemaphoreCount = 0;
@@ -127,11 +202,12 @@ Result<void> stepSimulator(Simulator& simulator)
 	VK_THROW(vkQueueSubmit(device.commandQueue, 1, &submitInfo, simulator.submitFinishedFence));
 
 	VK_THROW(vkWaitForFences(device.device, 1, &simulator.submitFinishedFence, VK_TRUE, UINT64_MAX));
+	VK_THROW(vkResetFences(device.device, 1, &simulator.submitFinishedFence));
 
 	return Result<void>();
 }
 
-Result<void> writeSimlatorStateToStepFile(Simulator& simulator, std::string filepath)
+Result<void> writeSimulatorStateToStepFile(Simulator& simulator, std::string filepath)
 {
 	return Result<void>();
 }
@@ -141,7 +217,7 @@ vec3 directionFromAngles(vec2 rotation)
 	return { sin(rotation.y), cos(rotation.x), cos(rotation.y) };
 }
 
-Result<void> writeSimlatorStateToVizFile(Simulator& simulator, std::string filepath)
+Result<void> writeSimulatorStateToVizFile(Simulator& simulator, std::string filepath)
 {
 	std::ofstream out(filepath, std::ios::binary | std::ios::trunc);
 

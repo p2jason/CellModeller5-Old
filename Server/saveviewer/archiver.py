@@ -29,6 +29,10 @@ class SaveArchiver:
 		for uuid, relative_path in self.master_data["saved_simulations"].items():
 			index_path = os.path.join(self.archive_root, relative_path, "index.json")
 
+			if not os.path.isfile(index_path):
+				print(f"Could not find simulation: {uuid}")
+				continue
+
 			with open(index_path, "r") as index_file:
 				self.sim_data[str(uuid)] = json.loads(index_file.read())
 
