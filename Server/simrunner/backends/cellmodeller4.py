@@ -65,9 +65,13 @@ class CellModeller4Backend(SimulationBackend):
 			color_b = int(255.0 * min(state.color[2], 1.0))
 			packed_color = 0xFF000000 | (color_b << 16) | (color_g << 8) | color_r
 
+			# The length is computed differenty in CellModeller4 and CellModeller5. The front-end 
+			# expects that the length will be calculated based on how its done in CM5.
+			final_length = state.length + 1.0 - 2.0 * state.radius
+
 			byte_buffer.write(struct.pack("fff", state.pos[0], state.pos[2], state.pos[1]))
 			byte_buffer.write(struct.pack("fff", state.dir[0], state.dir[2], state.dir[1]))
-			byte_buffer.write(struct.pack("ffI", state.length + 1.0, state.radius, packed_color))
+			byte_buffer.write(struct.pack("ffI", final_length, state.radius, packed_color))
 
 		with open(viz_bin_path, "wb") as out_file:
 			out_file.write(byte_buffer.getbuffer())

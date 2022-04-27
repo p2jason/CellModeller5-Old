@@ -47,16 +47,18 @@ void main() {
 	mat4 modelMatrix = mat4(rotMatrix * scaleMatrix);
 	modelMatrix[3] = vec4(a_CellPos, 1.0);
 
+	float totalLength = a_Length + 2.0 * a_Radius;
+
 	vec3 position = a_Position;
-	position.y += mix(-1.0, 1.0, a_TexCoords.x) * (a_Length - 1.0);
+	position.y += mix(-1.0, 1.0, a_TexCoords.x) * (totalLength - 1.0);
 
 	vec4 worldPos = modelMatrix * vec4(position, 1.0);
 	
 	//Write varyings
 	gl_Position = u_MvpMatrix * worldPos;
 
-	v_CellEnd0 = vec3(modelMatrix * vec4(0.0,  a_Length - 1.0, 0.0, 1.0));
-	v_CellEnd1 = vec3(modelMatrix * vec4(0.0, -a_Length + 1.0, 0.0, 1.0));
+	v_CellEnd0 = vec3(modelMatrix * vec4(0.0,  totalLength - 1.0, 0.0, 1.0));
+	v_CellEnd1 = vec3(modelMatrix * vec4(0.0, -totalLength + 1.0, 0.0, 1.0));
 
 	v_WorldPos = worldPos.xyz;
 //	v_Normal = rotMatrix * a_Normal;

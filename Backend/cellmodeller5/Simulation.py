@@ -16,7 +16,7 @@ class Simulator:
 		self.step_index += 1
 		self.native.step()
 
-		if self.step_index >= 5:
+		if self.step_index >= 100:
 			self.is_running = False
 
 	def dump_to_step_file(self, path):
