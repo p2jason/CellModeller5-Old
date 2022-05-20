@@ -19,6 +19,9 @@ class Simulator:
 		if self.step_index >= 100:
 			self.is_running = False
 
+	def get_step_time(self):
+		return self.native.get_last_step_time()
+
 	def dump_to_step_file(self, path):
 		self.native.dump_to_step_file(path)
 	

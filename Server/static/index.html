@@ -4,7 +4,7 @@
 	<script>
 		function submitCreateForm() {
 			var name = "This is the name";
-			var source = "import random\nfrom CellModeller.Regulation.ModuleRegulator import ModuleRegulator\nfrom CellModeller.Biophysics.BacterialModels.CLBacterium import CLBacterium\nfrom CellModeller.GUI import Renderers\nimport numpy\nimport math\n\nN0 = 10\n\ndef setup(sim):\n    # Set biophysics, signalling, and regulation models\n    biophys = CLBacterium(sim, jitter_z=False, gamma = 100, max_cells=100000, max_planes=1)\n\n    regul = ModuleRegulator(sim, sim.moduleName)	# use this file for reg too\n    # Only biophys and regulation\n    sim.init(biophys, regul, None, None)\n\n    #biophys.addPlane((0,0,0),(0,0,1),1.0) #Base plane\n    #biophys.addPlane((10,0,0),(-1,0,0),1.0)\n    #biophys.addPlane((-10,0,0),(1,0,0),1.0)\n    #biophys.addPlane((0,10,0),(0,-1,0),1.0)\n    #biophys.addPlane((0,-10,0),(0,1,0),1.0)\n\n    sim.addCell(cellType=0, pos=(0,0,0))\n\n    # Add some objects to draw the models\n    therenderer = Renderers.GLBacteriumRenderer(sim)\n    sim.addRenderer(therenderer)\n    sim.pickleSteps = 1\n\ndef init(cell):\n    cell.targetVol = 3.5 + random.uniform(0.0,0.5)\n    cell.growthRate = 1.0\n    cell.n_a = N0//2\n    cell.n_b = N0 - cell.n_a\n\ndef update(cells):\n    for (id, cell) in cells.items():\n        cell.color = [0.1, cell.n_a/3.0, cell.n_b/3.0]\n        if cell.volume > cell.targetVol:\n            cell.divideFlag = True\n\ndef divide(parent, d1, d2):\n    d1.targetVol = 3.5 + random.uniform(0.0,0.5)\n    d2.targetVol = 3.5 + random.uniform(0.0,0.5)\n    plasmids = [0]*parent.n_a*2 + [1]*parent.n_b*2\n    random.shuffle(plasmids)\n    d1.n_a = 0\n    d1.n_b = 0\n    d2.n_a = 0\n    d2.n_b = 0\n    for p in plasmids[:N0]:\n        if p == 0: d1.n_a +=1\n        else: d1.n_b +=1\n    for p in plasmids[N0:2*N0]:\n        if p == 0: d2.n_a +=1\n        else: d2.n_b +=1\n    assert parent.n_a + parent.n_b == N0\n    assert d1.n_a + d1.n_b == N0\n    assert d2.n_a + d2.n_b == N0\n    assert parent.n_a*2 == d1.n_a+d2.n_a\n    assert parent.n_b*2 == d1.n_b+d2.n_b\n    assert parent.n_a > 0 or (d1.n_a == 0 and d2.n_a == 0)\n    assert parent.n_b > 0 or (d1.n_b == 0 and d2.n_b == 0)\n";
+			var source = document.getElementById("sim-script-text").value;
 			var backend = {
 				"version": "CellModeller4",
 				"url": "https://github.com/HaseloffLab/CellModeller.git",
@@ -39,8 +39,73 @@
 	</script>
 </head>
 <body>
-	<form id="create-sim-form" onsubmit="submitCreateForm()">
-	</form>
+	<textarea id="sim-script-text" style="width: 40rem; height: 50rem;">
+import random
+from CellModeller.Regulation.ModuleRegulator import ModuleRegulator
+from CellModeller.Biophysics.BacterialModels.CLBacterium import CLBacterium
+from CellModeller.GUI import Renderers
+import numpy
+import math
+
+N0 = 10
+
+def setup(sim):
+    # Set biophysics, signalling, and regulation models
+    biophys = CLBacterium(sim, jitter_z=False, gamma = 100, max_cells=100000, max_planes=1)
+
+    regul = ModuleRegulator(sim, sim.moduleName)	# use this file for reg too
+    # Only biophys and regulation
+    sim.init(biophys, regul, None, None)
+
+    #biophys.addPlane((0,0,0),(0,0,1),1.0) #Base plane
+    #biophys.addPlane((10,0,0),(-1,0,0),1.0)
+    #biophys.addPlane((-10,0,0),(1,0,0),1.0)
+    #biophys.addPlane((0,10,0),(0,-1,0),1.0)
+    #biophys.addPlane((0,-10,0),(0,1,0),1.0)
+
+    sim.addCell(cellType=0, pos=(0,0,0))
+
+    # Add some objects to draw the models
+    therenderer = Renderers.GLBacteriumRenderer(sim)
+    sim.addRenderer(therenderer)
+    sim.pickleSteps = 1
+
+def init(cell):
+    cell.targetVol = 3.5 + random.uniform(0.0,0.5)
+    cell.growthRate = 1.0
+    cell.n_a = N0//2
+    cell.n_b = N0 - cell.n_a
+
+def update(cells):
+    for (id, cell) in cells.items():
+        cell.color = [0.1, cell.n_a/3.0, cell.n_b/3.0]
+        if cell.volume > cell.targetVol:
+            cell.divideFlag = True
+
+def divide(parent, d1, d2):
+    d1.targetVol = 3.5 + random.uniform(0.0,0.5)
+    d2.targetVol = 3.5 + random.uniform(0.0,0.5)
+    plasmids = [0]*parent.n_a*2 + [1]*parent.n_b*2
+    random.shuffle(plasmids)
+    d1.n_a = 0
+    d1.n_b = 0
+    d2.n_a = 0
+    d2.n_b = 0
+    for p in plasmids[:N0]:
+        if p == 0: d1.n_a +=1
+        else: d1.n_b +=1
+    for p in plasmids[N0:2*N0]:
+        if p == 0: d2.n_a +=1
+        else: d2.n_b +=1
+    assert parent.n_a + parent.n_b == N0
+    assert d1.n_a + d1.n_b == N0
+    assert d2.n_a + d2.n_b == N0
+    assert parent.n_a*2 == d1.n_a+d2.n_a
+    assert parent.n_b*2 == d1.n_b+d2.n_b
+    assert parent.n_a > 0 or (d1.n_a == 0 and d2.n_a == 0)
+    assert parent.n_b > 0 or (d1.n_b == 0 and d2.n_b == 0)
+	</textarea>
+	<br/>
 	<button type="submit" onclick="submitCreateForm()">Create</button>
 </body>
 </html>

@@ -32,10 +32,12 @@ struct Simulator
 		GPUBuffer velocities = {};
 	};
 
+	/********* GPU stuff *********/
 	GPUContext gpuContext;
 	GPUDevice gpuDevice;
 
 	VkFence submitFinishedFence = VK_NULL_HANDLE;
+	VkQueryPool timingQueryPool = VK_NULL_HANDLE;
 
 	/********* Simulation state *********/
 	uint32_t cellCount = 0;
@@ -46,12 +48,17 @@ struct Simulator
 	GPUState stagingState = {};
 
 	bool uploadStateOnNextStep = false;
+	double lastStepTime = 0.0;
 
 	/********* Shaders *********/
 	VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
 	VkDescriptorSet stateDescSet = VK_NULL_HANDLE;
 
 	ShaderPipeline collisionShader = {};
+
+	/********* Miscellaneous *********/
+	std::function<void()> queueWaitBegin = nullptr;
+	std::function<void()> queueWaitEnd = nullptr;
 };
 
 typedef std::function<std::string(const std::string&)> ShaderImportCallback;

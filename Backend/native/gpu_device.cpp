@@ -257,6 +257,7 @@ Result<void> initGPUDevice(GPUDevice* device, GPUContext& context)
 		return CM_ERROR_MESSAGE("Failed to find a command queue with compute support");
 	}
 
+	device->queueProperties = queueProperties[selectedQueue];
 	device->queueFamilyIndex = selectedQueue;
 
 	//Create device

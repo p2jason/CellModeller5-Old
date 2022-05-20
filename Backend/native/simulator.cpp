@@ -5,9 +5,6 @@
 #include <fstream>
 #include <iostream>
 
-#include <thread>
-#include <chrono>
-
 struct GlobalConsts
 {
 	uint32_t cellCount = 0;
@@ -34,11 +31,22 @@ Result<void> initSimulator(Simulator* simulator, bool withDebug)
 	CM_PROPAGATE_ERROR(initGPUContext(&simulator->gpuContext, withDebug));
 	CM_PROPAGATE_ERROR(initGPUDevice(&simulator->gpuDevice, simulator->gpuContext));
 
+	VkDevice deviceHandle = simulator->gpuDevice.device;
+
 	//Create fence for waiting on queue submissions
 	VkFenceCreateInfo fenceCI = {};
 	fenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 
-	VK_THROW(vkCreateFence(simulator->gpuDevice.device, &fenceCI, nullptr, &simulator->submitFinishedFence));
+	VK_THROW(vkCreateFence(deviceHandle, &fenceCI, nullptr, &simulator->submitFinishedFence));
+
+	//Create timing query pool
+	VkQueryPoolCreateInfo queryPoolCI = {};
+	queryPoolCI.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+	queryPoolCI.queryType = VK_QUERY_TYPE_TIMESTAMP;
+	queryPoolCI.queryCount = 2;
+	queryPoolCI.pipelineStatistics = 0;
+	
+	VK_THROW(vkCreateQueryPool(deviceHandle, &queryPoolCI, nullptr, &simulator->timingQueryPool));
 
 	//Print details
 	const VkPhysicalDeviceProperties& properties = simulator->gpuDevice.properties;
@@ -126,6 +134,11 @@ void deinitSimulator(Simulator& simulator)
 		vkDestroyFence(deviceHandle, simulator.submitFinishedFence, nullptr);
 	}
 
+	if (simulator.timingQueryPool != VK_NULL_HANDLE)
+	{
+		vkDestroyQueryPool(deviceHandle, simulator.timingQueryPool, nullptr);
+	}
+
 	freeCPUState(simulator.cpuState);
 	freeGPUState(simulator, simulator.gpuState);
 	freeGPUState(simulator, simulator.stagingState);
@@ -195,6 +208,10 @@ Result<void> stepSimulator(Simulator& simulator)
 
 	VK_THROW(vkBeginCommandBuffer(device.commandBuffer, &beginInfo));
 
+	//Write first timestamp
+	vkCmdResetQueryPool(device.commandBuffer, simulator.timingQueryPool, 0, 2);
+	vkCmdWriteTimestamp(device.commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, simulator.timingQueryPool, 0);
+
 	//Copy state to GPU
 	VkBufferCopy copyRegions[] = {
 		/* positions */
@@ -251,6 +268,9 @@ Result<void> stepSimulator(Simulator& simulator)
 	vkCmdCopyBuffer(device.commandBuffer, simulator.gpuState.sizes.buffer, simulator.stagingState.sizes.buffer, 1, &copyRegions[2]);
 	vkCmdCopyBuffer(device.commandBuffer, simulator.gpuState.velocities.buffer, simulator.stagingState.velocities.buffer, 1, &copyRegions[3]);
 
+	//Write second timestamp
+	vkCmdWriteTimestamp(device.commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, simulator.timingQueryPool, 1);
+
 	VK_THROW(vkEndCommandBuffer(device.commandBuffer));
 
 	VkSubmitInfo submitInfo = {};
@@ -265,13 +285,32 @@ Result<void> stepSimulator(Simulator& simulator)
 	
 	VK_THROW(vkQueueSubmit(device.commandQueue, 1, &submitInfo, simulator.submitFinishedFence));
 
+	if (simulator.queueWaitBegin) simulator.queueWaitBegin();
+
 	VK_THROW(vkWaitForFences(device.device, 1, &simulator.submitFinishedFence, VK_TRUE, UINT64_MAX));
 	VK_THROW(vkResetFences(device.device, 1, &simulator.submitFinishedFence));
+
+	if (simulator.queueWaitEnd) simulator.queueWaitEnd();
 
 	///////////////////////////////////////////////////////////////
 	// Copy staging to CPU state (probably)
 	///////////////////////////////////////////////////////////////
+	// Note(Jason): When copying results of very large simulations, this can become a pretty
+	// big bottleneck. We may want to consider copying the data only occasionally or not at all
 	copyStagingToCPU(simulator);
+
+	//Calculate the time it took for the step to complete
+	uint64_t timestamps[2];
+	VK_CHECK(vkGetQueryPoolResults(device.device, simulator.timingQueryPool, 0, 2, sizeof(timestamps), timestamps, sizeof(timestamps[0]), VK_QUERY_RESULT_64_BIT));
+
+	const uint32_t timestampValidBits = simulator.gpuDevice.queueProperties.timestampValidBits;
+	const double timestampPeriod = (double)simulator.gpuDevice.properties.limits.timestampPeriod;
+
+	const uint64_t timestampMask = timestampValidBits >= (sizeof(uint64_t) * 8) ? ~((uint64_t)0) : ((uint64_t)1 << timestampValidBits) - (uint64_t)(1);
+	const double startTimestamp = (timestamps[0] & timestampMask) * timestampPeriod;
+	const double endTimestamp = (timestamps[1] & timestampMask) * timestampPeriod;
+
+	simulator.lastStepTime = (endTimestamp - startTimestamp) / 1e9;
 
 	return Result<void>();
 }

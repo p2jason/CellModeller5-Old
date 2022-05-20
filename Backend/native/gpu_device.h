@@ -33,6 +33,7 @@ struct GPUDevice
 	VkCommandPool commandPool = VK_NULL_HANDLE;
 	VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
 
+	VkQueueFamilyProperties queueProperties = {};
 	uint32_t queueFamilyIndex = 0xFFFFFFFFu;
 };
 
