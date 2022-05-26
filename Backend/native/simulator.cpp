@@ -159,7 +159,7 @@ Result<void> stepSimulator(Simulator& simulator)
 
 	GlobalConsts consts = {};
 	consts.cellCount = simulator.cellCount;
-	consts.deltaTime = 0.01f;
+	consts.deltaTime = 0.03f;
 
 	VK_THROW(vkResetCommandPool(device.device, device.commandPool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT));
 

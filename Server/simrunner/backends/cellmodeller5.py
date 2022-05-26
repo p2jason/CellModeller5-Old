@@ -3,6 +3,7 @@ from .backend import SimulationBackend
 import os
 import importlib
 import sys
+import time
 
 sys.path.append("C:\\Users\\Jason\\Downloads\\CellModeller5\\CellModeller\\build\\lib.win-amd64-3.8")
 
@@ -20,6 +21,8 @@ class CellModeller5Backend(SimulationBackend):
 	
 	def step(self):
 		self.simulator.step()
+
+		time.sleep(0.2)
 
 	def write_step_files(self):
 		base_file_name = "step-%05i" % self.simulator.get_step_index()

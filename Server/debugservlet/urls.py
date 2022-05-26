@@ -8,4 +8,7 @@ urlpatterns = [
 	path("api/saveviewer/framedata", views.frame_data),
 	path("api/saveviewer/simulationinfo", views.sim_info),
 	path("api/simrunner/stopsimulation", views.stop_simulation),
+
+	path("api/dbgservlet/reload", views.reload_simulation),
+	path("api/dbgservlet/recompile", views.recompile_simulation),
 ]

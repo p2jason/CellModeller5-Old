@@ -29,8 +29,22 @@ void main() {
 	if (cellIndex >= c_cellCount) {
 		return;
 	}
+
+	vec3 totalForce = vec3(0);
+	vec3 currentPosition = u_positions[cellIndex];
+
+#if 1
+	for (uint i = 0; i < c_cellCount; ++i) {
+		if (i == cellIndex) continue;
+
+		vec3 toOther = u_positions[i] - currentPosition;
+		float otherDistance = 1.0 / length(toOther);
+		
+		totalForce -= toOther * (otherDistance);
+	}
+#endif
 	
-	vec3 accel = vec3(0, -9.81, 0);
+	vec3 accel = vec3(0, -9.81, 0) + totalForce;
 	u_velocities[cellIndex] += accel * c_deltaTime;
 	u_positions[cellIndex] += u_velocities[cellIndex] * c_deltaTime;
 }

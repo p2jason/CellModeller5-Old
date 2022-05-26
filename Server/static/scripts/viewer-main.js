@@ -140,10 +140,21 @@ async function beginSimulation(context, uuid) {
 }
 
 function recompileDevSimulation(context) {
-	console.log(context["commsSocket"])
-	if (context["commsSocket"] !== null) {
-		context["commsSocket"].send(`{ "action": "recompiledev" }`)
-	}
+	return fetch(`/api/dbgservlet/recompile`)
+		.then(response => {
+			if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+
+			return waitForInitialization(context, document.getElementById("uuid-field").value);
+		});
+}
+
+function reloadDevSimulation(context) {
+	return fetch(`/api/dbgservlet/reload`)
+		.then(response => {
+			if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+
+			return waitForInitialization(context, document.getElementById("uuid-field").value);
+		});
 }
 
 function stopSimulation(context) {
@@ -208,7 +219,12 @@ function initFrame(gl, context) {
 
 	context["alwaysUseLatestStep"] = snapToLastCheckbox.checked;
 
-	//document.getElementById("recompile-btn").onclick = function(event) { recompileDevSimulation(context); };
+	var recompileBtn = document.getElementById("recompile-btn");
+	if (recompileBtn !== null) recompileBtn.onclick = function(event) { recompileDevSimulation(context); };
+
+	var reloadBtn = document.getElementById("reload-btn");
+	if (reloadBtn !== null) reloadBtn.onclick = function(event) { reloadDevSimulation(context); };
+
 	document.getElementById("stop-btn").onclick = function(event) { stopSimulation(context); };
 
 	//Initialize the renderer

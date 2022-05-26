@@ -4,14 +4,14 @@ import json
 from simrunner import websocket_groups as wsgroups
 from simrunner.instances.manager import is_simulation_running, send_message_to_simulation
 
-from django.apps import apps
+from .apps import get_dbgservlet_instance
 
 """
 Both of these are basically modified version of the consumer classes in 'simrunner.consumers'. I' 
 """
 class SimCommsConsumer(WebsocketConsumer):
 	def connect(self):
-		self.sim_uuid = apps.get_app_config("debugservlet").sim_uuid
+		self.sim_uuid = str(get_dbgservlet_instance().sim_uuid)
 
 		if not is_simulation_running(self.sim_uuid):
 			self.close(code=4101)
@@ -29,7 +29,7 @@ class SimCommsConsumer(WebsocketConsumer):
 
 class InitLogsConsumer(WebsocketConsumer):
 	def connect(self):
-		self.sim_uuid = apps.get_app_config("debugservlet").sim_uuid
+		self.sim_uuid = str(get_dbgservlet_instance().sim_uuid)
 
 		self.accept()
 

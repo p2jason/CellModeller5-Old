@@ -13,11 +13,21 @@ class DebugServletAppConfig(AppConfig):
 	verbose_name = "Debug Servlet for CellModeller5"
 
 	def ready(self):
-		# Register simulation
-		self.sim_uuid = uuid.uuid4()
-		sim_name = "CellModeller5 Development Simulation"
-		sim_backend = "CellModeller5 Development Build"
-		sim_source = """
+		self.sim_uuid = None
+
+		launch_default_simulation()
+
+def get_dbgservlet_instance():
+	return apps.get_app_config("debugservlet")
+
+def launch_default_simulation():
+	sim_uuid = uuid.uuid4()
+
+	get_dbgservlet_instance().sim_uuid = sim_uuid
+
+	sim_name = "CellModeller5 Development Simulation"
+	sim_backend = "CellModeller5 Development Build"
+	sim_source = """
 import random
 from CellModeller.Regulation.ModuleRegulator import ModuleRegulator
 from CellModeller.Biophysics.BacterialModels.CLBacterium import CLBacterium
@@ -78,26 +88,26 @@ def divide(parent, d1, d2):
 	d2.targetVol = 3.5 + random.uniform(0.0,0.5)
 		"""
 
-		id_str = str(self.sim_uuid)
+	id_str = str(sim_uuid)
 
-		params = BackendParameters()
-		params.uuid = self.sim_uuid
-		params.name = sim_name
-		params.source = sim_source
-		
-		extra_vars = { "backend_version": sim_backend }
-		paths = sv_archiver.get_save_archiver().register_simulation(id_str, f"./{id_str}", sim_name, False, extra_init_vars=extra_vars)
+	params = BackendParameters()
+	params.uuid = sim_uuid
+	params.name = sim_name
+	params.source = sim_source
+	
+	extra_vars = { "backend_version": sim_backend }
+	paths = sv_archiver.get_save_archiver().register_simulation(id_str, f"./{id_str}", sim_name, False, extra_init_vars=extra_vars)
 
-		params.sim_root_dir = paths.root_path
-		params.cache_dir = paths.cache_path
-		params.cache_relative_prefix = paths.relative_cache_path
-		params.backend_dir = paths.backend_path
-		params.backend_relative_prefix = paths.relative_backend_path
+	params.sim_root_dir = paths.root_path
+	params.cache_dir = paths.cache_path
+	params.cache_relative_prefix = paths.relative_cache_path
+	params.backend_dir = paths.backend_path
+	params.backend_relative_prefix = paths.relative_backend_path
 
-		params.backend_version = sim_backend
+	params.backend_version = sim_backend
 
-		# Spawn simulation
-		spawn_simulation(id_str, proc_class=SimulationThread, proc_args=(params,))
+	# Spawn simulation
+	spawn_simulation(id_str, proc_class=SimulationThread, proc_args=(params,))
 
 def is_dev_simulation(uuid: str):
 	return uuid == apps.get_app_config("debugservlet").sim_uuid

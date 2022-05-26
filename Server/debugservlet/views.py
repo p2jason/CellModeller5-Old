@@ -1,10 +1,10 @@
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.template import Context, Template
-from django.apps import apps
 
 from saveviewer import archiver as sv_archiver
-from simrunner.instances.manager import is_simulation_running
+from simrunner.instances.manager import is_simulation_running, kill_simulation
 
+from .apps import get_dbgservlet_instance, launch_default_simulation
 from . import settings
 
 import io
@@ -28,7 +28,7 @@ def sim_info(request):
 	if not request.GET["uuid"] == settings.DUMMY_UUID:
 		return HttpResponseBadRequest("Invalid simulation UUID provided")
 
-	sim_uuid = apps.get_app_config("debugservlet").sim_uuid
+	sim_uuid = get_dbgservlet_instance().sim_uuid
 	id_str = str(sim_uuid)
 
 	index_data = sv_archiver.get_save_archiver().get_sim_index_data(id_str)
@@ -59,7 +59,7 @@ def frame_data(request):
 	# Read simulation file
 	index = request.GET["index"]
 
-	sim_uuid = apps.get_app_config("debugservlet").sim_uuid
+	sim_uuid = get_dbgservlet_instance().sim_uuid
 	selected_frame = sv_archiver.get_save_archiver().get_sim_bin_file(str(sim_uuid), index)
 
 	# Read frame data
@@ -74,6 +74,19 @@ def frame_data(request):
 
 	return response
 
+# api/dbgservlet/reload
+def reload_simulation(request):
+	sim_uuid = get_dbgservlet_instance().sim_uuid
+	kill_simulation(str(sim_uuid))
+
+	launch_default_simulation()
+
+	return HttpResponse()
+
+# api/dbgservlet/recompile
+def recompile_simulation(request):
+	return HttpResponse()
+
 def stop_simulation(request):
 	if not "uuid" in request.GET:
 		return HttpResponseBadRequest("No simulation UUID provided")
@@ -81,7 +94,7 @@ def stop_simulation(request):
 	if not request.GET["uuid"] == settings.DUMMY_UUID:
 		return HttpResponseBadRequest("Invalid simulation UUID provided")
 
-	sim_uuid = apps.get_app_config("debugservlet").sim_uuid
+	sim_uuid = get_dbgservlet_instance().sim_uuid
 	kill_simulation(str(sim_uuid))
 
 	return HttpResponse()
