@@ -1,47 +1,56 @@
 from channels.generic.websocket import WebsocketConsumer
 import json
 
+from saveviewer import archiver as sv_archiver
+
 from . import websocket_groups as wsgroups
-from .instances.manager import is_simulation_running, send_message_to_simulation
+from .instances.manager import is_simulation_running, send_message_to_simulation, kill_simulation
 
-class SimCommsConsumer(WebsocketConsumer):
+class UserCommsConsumer(WebsocketConsumer):
 	def connect(self):
-		self.sim_uuid = str(self.scope["url_route"]["kwargs"]["sim_uuid"])
-
-		if not is_simulation_running(self.sim_uuid):
-			self.close(code=4101)
-			return
-
-		wsgroups.add_websocket_to_group(f"simcomms/{self.sim_uuid}", self)
-
+		self.sim_uuid = None
 		self.accept()
-
-	def disconnect(self, close_code):
-		wsgroups.remove_websocket_from_group(f"simcomms/{self.sim_uuid}", self)
 
 	def receive(self, text_data):
-		send_message_to_simulation(self.sim_uuid, json.loads(text_data))
+		msg_data = json.loads(text_data)
 
-class InitLogsConsumer(WebsocketConsumer):
-	def connect(self):
-		self.sim_uuid = str(self.scope["url_route"]["kwargs"]["sim_uuid"])
+		if msg_data["action"] == "connectto":
+			all_sims = sv_archiver.get_save_archiver().get_all_sim_data()
 
-		# We need to accept the web socket before we close it. By doing so, we are opening
-		# a connection and then closing it, otherwise, (if we closed the socket without
-		# accepting it first) we would be rejecting the connection. When a connection is 
-		# rejected, the WebSocket class on the front-end will throw an error.
-		self.accept()
+			if msg_data["data"] in all_sims:
+				if not self.sim_uuid == None:
+					wsgroups.remove_websocket_from_group(f"simcomms/{self.sim_uuid}", self)
 
-		close_parameters = wsgroups.get_close_parameters(f"initlogs/{self.sim_uuid}")
-		if not close_parameters is None:
-			if not close_parameters[1] is None:
-				self.send(text_data=str(close_parameters[1]))
-			
-			self.close(code=close_parameters[0])
-			return
+				self.sim_uuid = msg_data["data"]
 
-		if not wsgroups.add_websocket_to_group(f"initlogs/{self.sim_uuid}", self):
-			self.close(code=4102)
+				wsgroups.add_websocket_to_group(f"simcomms/{self.sim_uuid}", self)
 
-	def disconnect(self, close_code):
-		wsgroups.remove_websocket_from_group(f"initlogs/{self.sim_uuid}", self)
+				self.send_sim_header()
+			else:
+				self.close()
+		elif msg_data["action"] == "getheader":
+			self.send_sim_header()
+		elif msg_data["action"] == "stop":
+			kill_simulation(self.sim_uuid)
+		elif msg_data["action"] == "msgtoinstance":
+			send_message_to_simulation(self.sim_uuid, msg_data["data"])
+
+		return
+
+	def send_sim_header(self):
+		archiver = sv_archiver.get_save_archiver()
+
+		sim_data = archiver.get_sim_index_data(self.sim_uuid)
+		is_online = is_simulation_running(self.sim_uuid)
+
+		response_data = {
+			"action": "simheader",
+			"data": {
+				"uuid": self.sim_uuid,
+				"name": sim_data["name"],
+				"frameCount": sim_data["num_frames"],
+				"isOnline": is_online
+			}
+		}
+
+		self.send(text_data=json.dumps(response_data))

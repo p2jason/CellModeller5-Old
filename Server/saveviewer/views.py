@@ -1,12 +1,9 @@
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFound
-from django.views.generic import TemplateView, RedirectView
 
 import json
 import io
-import os
 
 from . import archiver as sv_archiver
-from simrunner.instances.manager import is_simulation_running
 
 def get_all_simulations(request):
 	archiver = sv_archiver.get_save_archiver()
@@ -19,31 +16,6 @@ def get_all_simulations(request):
 			"name": data["name"],
 			"frame_count": data["num_frames"]
 		})
-
-	response_content = json.dumps(data)
-	response = HttpResponse(response_content, content_type="application/json")
-	response["Content-Length"] = len(response_content)
-
-	return response
-
-def sim_info(request):
-	if not "uuid" in request.GET:
-		return HttpResponseBadRequest("No simulation UUID provided")
-
-	sim_id = request.GET["uuid"]
-
-	try:
-		index_data = sv_archiver.get_save_archiver().get_sim_index_data(sim_id)
-		is_online = is_simulation_running(sim_id)
-	except KeyError:
-		return HttpResponseNotFound(f"No simulation with the UUID '{sim_id}' was found")
-
-	data = {
-		"name": index_data["name"],
-		"frameCount": index_data["num_frames"],
-		"uuid": str(sim_id),
-		"isOnline": is_online
-	}
 
 	response_content = json.dumps(data)
 	response = HttpResponse(response_content, content_type="application/json")

@@ -16,8 +16,17 @@ function setButtonContainerDisplay(display) {
 	document.getElementById("button-container").style.display = display;
 }
 
-function setInitLogDisplay(display) {
-	document.getElementById("init-log-container").style.display = display;
+/****** Init log ******/
+function openInitLogWindow() {
+	document.getElementById("init-log-container").style.display = "inline";
+}
+
+function closeInitLogWindow(clear) {
+	document.getElementById("init-log-container").style.display = "none";
+
+	if (close) {
+		document.getElementById("init-log-text").value = "";
+	}
 }
 
 function appendInitLogMessage(message) {
@@ -32,16 +41,17 @@ function appendInitLogMessage(message) {
 }
 
 function requestFrame(context, uuid, index) {
-	context["current_index"] = index
-
+	context["currentIndex"] = index;
+	
 	return fetch(`/api/saveviewer/framedata?index=${index}&uuid=${uuid}`)
 		.then(response => {
 			if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
 			return response.arrayBuffer();
 		})
 		.then(buffer => {
-			if (context["current_index"] != index) {
-				return;
+			if (context["currentIndex"] != index) {
+				//console.log("Skipping frame");
+				//return;
 			}
 
 			context["simInfo"].frameIndex = index;
@@ -53,68 +63,57 @@ function requestFrame(context, uuid, index) {
 		.catch(error => console.log("Error when reuesting simulation info:", error));
 }
 
-async function waitForInitialization(context, uuid) {
-	var logSocket = new WebSocket(`ws://${window.location.host}/ws/initlogs/${uuid}`);
-	
-	logSocket.onopen = function(e) {
-		setInitLogDisplay("inline");
-	};
-	
-	logSocket.onmessage = function(e) {
-		appendInitLogMessage(e.data);
-	};
-	
-	logSocket.onclose = (e) => {
-		if (e.code == 4103) {
-			// 
-		} else {
-			setInitLogDisplay("none");
-			beginSimulation(context, uuid);
-		}
-	};
+function connectToSimulation(context, uuid) {
+	connectToServer(context)
+		.then((socket) => { socket.send(JSON.stringify({ "action": "connectto", "data": `${uuid}` })); });
 }
 
-async function beginSimulation(context, uuid) {
-	context["simUUID"] = uuid;
+function connectToServer(context) {
+	return new Promise((resolve, reject) => {
+		setStatusMessage("Connecting");
 
-	context["simInfo"] = {};
-	context["simInfo"].frameIndex = 0;
-
-	setSimFrame(0, 0);
-	setStatusMessage("Offline");
-
-	//Request simulation info
-	const simulationData = await fetch(`/api/saveviewer/simulationinfo?uuid=${uuid}`);
-	const simulationInfo = await simulationData.json();
-
-	context["simInfo"].name = simulationInfo.name;
-	context["simInfo"].frameCount = simulationInfo.frameCount;
-	context["simInfo"].isOnline = simulationInfo.isOnline;
-
-	setSimName(simulationInfo.name);
-
-	//Update timeline 
-	context["timelineSlider"].max = simulationInfo.frameCount;
-	
-	//Request the first frame of the simulation
-	if (simulationInfo.frameCount > 0) {
-		await requestFrame(context, context["simUUID"], 0);
-	}
-
-	//Open a web socket if the simulation is live
-	if (simulationInfo.isOnline) {
-		setButtonContainerDisplay("block")
+		var commsSocket = new WebSocket(`ws://${window.location.host}/ws/usercomms/`);
 		
-		setStatusMessage("Conneceting");
+		commsSocket.onopen = function(e) {
+			setStatusMessage("Connected");
+			resolve(commsSocket);
+		};
 
-		context["commsSocket"] = new WebSocket(`ws://${window.location.host}/ws/simcomms/${uuid}`);
-		context["commsSocket"].onopen = (e) => setStatusMessage("Running");
+		commsSocket.onerror = function(err) {
+			reject(err);
+		};
 		
-		context["commsSocket"].onmessage = function(e) {
+		commsSocket.onmessage = function(e) {
 			const message = JSON.parse(e.data);
 
-			if (message["action"] == "newframe") {
-				const frameCount = message["data"]["framecount"];
+			const action = message["action"];
+			const data = message["data"];
+
+			if (action === "simheader") {
+				context["simUUID"] = data["uuid"];
+
+				context["simInfo"] = {};
+				context["simInfo"].name = data.name;
+				context["simInfo"].frameIndex = 0;
+				context["simInfo"].frameCount = data.frameCount;
+				context["simInfo"].isOnline = data.isOnline;
+
+				context["timelineSlider"].max = data.frameCount;
+
+				setSimFrame(0, data.frameCount);
+				setStatusMessage("Offline");
+				setSimName(data.name);
+				
+				if (data.frameCount > 0) {
+					requestFrame(context, context["simUUID"], 0);
+				}
+
+				if (data.isOnline) {
+					setButtonContainerDisplay("block");
+					setStatusMessage("Running");
+				}
+			} else if (action === "newframe") {
+				const frameCount = data["frameCount"];
 
 				context["simInfo"].frameCount = frameCount;
 				context["timelineSlider"].max = frameCount;
@@ -126,17 +125,20 @@ async function beginSimulation(context, uuid) {
 
 					context["timelineSlider"].value = frameCount;
 				}
-			} else if (message["action"] == "error_message") {
-				console.error(`Simulation error:${message["data"]}`);
+			} else if (action === "infolog") {
+				openInitLogWindow();
+				appendInitLogMessage(data);
+			} else if (action === "closeinfolog") {
+				closeInitLogWindow(true);
 			}
 		};
 		
-		context["commsSocket"].onclose = function(e) {
+		commsSocket.onclose = (e) => {
 			setStatusMessage("Terminated");
-
-			context["commsSocket"] = null;
 		};
-	}
+
+		context["commsSocket"] = commsSocket;
+	});
 }
 
 function recompileDevSimulation(context) {
@@ -233,7 +235,8 @@ function initFrame(gl, context) {
 	const uuid = document.getElementById("uuid-field").value;
 
 	render.init(gl, context)
-		.then(() => waitForInitialization(context, uuid))
+		//.then(() => waitForInitialization(context, uuid))
+		.then(() => connectToSimulation(context, uuid))
 		.catch((error) => { console.log(`Error: ${error}`); });
 }
 

@@ -1,22 +1,14 @@
-import threading
 import multiprocessing as mp
 import traceback
 import json
-import sys, io, os
+import sys, os
 
 from .duplex_pipe_endpoint import DuplexPipeEndpoint
-from .manager import ISimulationInstance, kill_simulation
+from .manager import ISimulationInstance, InstanceMessage, InstanceAction, kill_simulation
 
-from simrunner import apps
-from simrunner import websocket_groups as wsgroups
 from simrunner.backends.cellmodeller4 import CellModeller4Backend
 
 from saveviewer import archiver as sv_archiver
-
-class InstanceMessage:
-	def __init__(self, action="", data=None):
-		self.action = action
-		self.data = data
 
 class SimulationProcess(ISimulationInstance):
 	def __init__(self, params):
@@ -52,33 +44,8 @@ class SimulationProcess(ISimulationInstance):
 	def on_message_from_instance(self, message):
 		# Another "sanity-check" try-except
 		try:
-			if not isinstance(message, InstanceMessage):
-				return
-
-			# Process the message from the child process and make
-			# the message that will be sent to the clients
-			message_text = None
-
-			if message.action == "newframe":
-				new_step_data = json.loads(message.data["new_data"])
-				frame_count = message.data["frame_count"]
-
-				sv_archiver.get_save_archiver().update_step_data(str(self.params.uuid), new_step_data)
-
-				self.endpoint.send_item(InstanceMessage("stepfileadded", None))
-
-				message_text = json.dumps({ "action": "newframe", "data": { "framecount": frame_count } })
-			elif message.action == "error_message":
-				message_text = json.dumps({ "action": "error_message", "data": str(message.data) }) 
-			elif message.action == "close":
-				self.close()
-
-			if message_text is None:
-				return
-
-			# Send the message to all the connected clients
-			super().send_item_to_clients(message_text)
-		except Exception as e:
+			super().process_message_from_instance(message)
+		except Exception:
 			traceback.print_exc()
 
 		return
@@ -102,7 +69,7 @@ class SimulationProcess(ISimulationInstance):
 	def close(self):
 		super().close()
 		
-		self.endpoint.send_item(InstanceMessage("close", None))
+		self.endpoint.send_item(InstanceMessage(InstanceAction.CLOSE, None))
 		#self.endpoint.shutdown()
 
 # This is what actually runs the simulation
@@ -126,9 +93,6 @@ def instance_control_thread(pipe, params):
 	out_stream.write(f"[INSTANCE PROCESS]: Creating instance process\n")
 
 	running = True
-
-	step_files_added = True
-	pause_simulation_cond = threading.Condition()
 
 	def endpoint_callback():
 		# We don't have any endpoint-related resources to clean up, but there is no point in
@@ -172,7 +136,7 @@ def instance_control_thread(pipe, params):
 			index_path = os.path.join(params.sim_root_dir, "index.json")
 			sim_data_str, frame_count = sv_archiver.add_entry_to_sim_index(index_path, step_path, viz_bin_path)
 
-			endpoint.send_item(InstanceMessage("newframe", { "frame_count": frame_count, "new_data": sim_data_str }))
+			endpoint.send_item(InstanceMessage(InstanceAction.NEW_FRAME, { "frame_count": frame_count, "new_data": sim_data_str }))
 
 			# NOTE(Jason): The stream won't write the results to a file immediately after getting some data.
 			# If we close Django from the terminal (with Ctrl+C or Ctrl+Break), then the simulation
@@ -186,14 +150,14 @@ def instance_control_thread(pipe, params):
 		exc_message = traceback.format_exc()
 		out_stream.write(exc_message)
 
-		endpoint.send_item(InstanceMessage("error_message", str(e)))
-		endpoint.send_item(InstanceMessage("close", { "abrupt": True }))
+		endpoint.send_item(InstanceMessage(InstanceAction.ERROR_MESSAGE, str(e)))
+		endpoint.send_item(InstanceMessage(InstanceAction.CLOSE, { "abrupt": True }))
 		endpoint.shutdown()
 
 	# Clean up instance
 	out_stream.write(f"[INSTANCE PROCESS]: Closing instance process\n")
 
-	endpoint.send_item(InstanceMessage("close", { "abrupt": False }))
+	endpoint.send_item(InstanceMessage(InstanceAction.CLOSE, { "abrupt": False }))
 	endpoint.shutdown()
 
 	log_stream.close()
