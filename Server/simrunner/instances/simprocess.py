@@ -1,13 +1,13 @@
 import multiprocessing as mp
 import traceback
-import json
 import sys, os
 
 from .duplex_pipe_endpoint import DuplexPipeEndpoint
-from .manager import ISimulationInstance, InstanceMessage, InstanceAction, kill_simulation
+
+from .manager import kill_simulation
+from .siminstance import ISimulationInstance, InstanceAction, InstanceMessage
 
 from simrunner.backends.cellmodeller4 import CellModeller4Backend
-
 from saveviewer import archiver as sv_archiver
 
 class SimulationProcess(ISimulationInstance):
@@ -69,7 +69,7 @@ class SimulationProcess(ISimulationInstance):
 	def close(self):
 		super().close()
 		
-		self.endpoint.send_item(InstanceMessage(InstanceAction.CLOSE, None))
+		self.endpoint.send_item(InstanceMessage(InstanceAction.STOP, None))
 		#self.endpoint.shutdown()
 
 # This is what actually runs the simulation
@@ -107,7 +107,7 @@ def instance_control_thread(pipe, params):
 		if not isinstance(message, InstanceMessage):
 			return
 
-		if message.action == "close":
+		if message.action == InstanceAction.STOP:
 			endpoint_callback()
 
 			out_stream.write(f"[INSTANCE PROCESS]: Stopping simulation loop\n")

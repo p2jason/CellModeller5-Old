@@ -1,19 +1,13 @@
 import threading
 import traceback
 import os
-import json
 import queue
 
-from .manager import ISimulationInstance, kill_simulation
+from .manager import kill_simulation
+from .siminstance import ISimulationInstance, InstanceAction, InstanceMessage
 
 from simrunner.backends.cellmodeller5 import CellModeller5Backend
 from saveviewer import archiver as sv_archiver
-
-from enum import Enum
-
-class InstanceAction(Enum):
-	START = 1
-	STOP = 2
 
 class SimulationThread(ISimulationInstance):
 	def __init__(self, params):
@@ -22,7 +16,7 @@ class SimulationThread(ISimulationInstance):
 		
 		self.msg_queue = queue.Queue()
 
-		self.thread = threading.Thread(target=instance_control_thread, args=(params, self.msg_queue, self.send_item_to_clients), daemon=True)
+		self.thread = threading.Thread(target=instance_control_thread, args=(params, self.msg_queue, self.process_message_from_instance), daemon=True)
 		self.thread.start()
 
 	def send_item_to_instance(self, item):
@@ -49,7 +43,7 @@ def instance_control_thread(params, msg_queue, send_func):
 				while running:
 					item = msg_queue.get_nowait()
 
-					if item is InstanceAction.STOP:
+					if item == InstanceAction.STOP:
 						running = False
 					
 					msg_queue.task_done()
@@ -73,9 +67,7 @@ def instance_control_thread(params, msg_queue, send_func):
 			index_path = os.path.join(params.sim_root_dir, "index.json")
 			sim_data_str, frame_count = sv_archiver.add_entry_to_sim_index(index_path, step_path, viz_bin_path)
 
-			sv_archiver.get_save_archiver().update_step_data(str(params.uuid), json.loads(sim_data_str))
-
-			send_func(json.dumps({ "action": "newframe", "data": { "framecount": frame_count } }))
+			send_func(InstanceMessage(InstanceAction.NEW_FRAME, { "frame_count": frame_count, "new_data": sim_data_str }))
 
 		backend.shutdown()
 	except Exception as e:

@@ -2,7 +2,9 @@ from django.apps import AppConfig, apps
 
 from simrunner.instances.manager import spawn_simulation, kill_simulation
 from simrunner.instances.simthread import SimulationThread
+from simrunner.instances.siminstance import ClientAction, ClientMessage
 from simrunner.backends.backend import BackendParameters
+from simrunner import websocket_groups as wsgroups
 
 from saveviewer import archiver as sv_archiver
 
@@ -109,5 +111,18 @@ def divide(parent, d1, d2):
 	# Spawn simulation
 	spawn_simulation(id_str, proc_class=SimulationThread, proc_args=(params,))
 
+	return sim_uuid
+
 def is_dev_simulation(uuid: str):
 	return uuid == apps.get_app_config("debugservlet").sim_uuid
+
+def dev_action_callback(action, data, consumer):
+	if action == "devreload":
+		kill_simulation(str(get_dbgservlet_instance().sim_uuid))
+		new_uuid = launch_default_simulation()
+
+		consumer.send_client_message(ClientMessage(ClientAction.RELOAD_DONE, { "uuid": str(new_uuid) }))
+	elif action == "devrecompile":
+		pass
+
+	return

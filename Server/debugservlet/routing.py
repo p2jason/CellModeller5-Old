@@ -1,11 +1,9 @@
 from django.urls import path
 
-from . import apps
-from . import consumers
+import simrunner.consumers as consumers
 
-from . import settings
+from . import apps
 
 websocket_urlpatterns = [
-    path(f"ws/simcomms/{settings.DUMMY_UUID}", consumers.SimCommsConsumer.as_asgi()),
-    path(f"ws/initlogs/{settings.DUMMY_UUID}", consumers.InitLogsConsumer.as_asgi()),
+    path('ws/usercomms/', consumers.UserCommsConsumer.as_asgi(custom_action_callback=apps.dev_action_callback)),
 ]

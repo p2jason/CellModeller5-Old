@@ -130,11 +130,15 @@ function connectToServer(context) {
 				appendInitLogMessage(data);
 			} else if (action === "closeinfolog") {
 				closeInitLogWindow(true);
+			} else if (action === "simstopped") {
+				setStatusMessage("Terminated");
+			} else if (action === "reloaddone") {
+				commsSocket.send(JSON.stringify({ "action": "connectto", "data": `${data["uuid"]}` }));
 			}
 		};
 		
 		commsSocket.onclose = (e) => {
-			setStatusMessage("Terminated");
+			setStatusMessage("Not connected");
 		};
 
 		context["commsSocket"] = commsSocket;
@@ -142,21 +146,19 @@ function connectToServer(context) {
 }
 
 function recompileDevSimulation(context) {
-	return fetch(`/api/dbgservlet/recompile`)
-		.then(response => {
-			if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+	if (context["commsSocket"] !== null) {
+		context["commsSocket"].send(JSON.stringify({ "action": "devrecompile", "data": "" }));
 
-			return waitForInitialization(context, document.getElementById("uuid-field").value);
-		});
+		setStatusMessage("Recompiling");
+	}
 }
 
 function reloadDevSimulation(context) {
-	return fetch(`/api/dbgservlet/reload`)
-		.then(response => {
-			if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+	if (context["commsSocket"] !== null) {
+		context["commsSocket"].send(JSON.stringify({ "action": "devreload", "data": "" }));
 
-			return waitForInitialization(context, document.getElementById("uuid-field").value);
-		});
+		setStatusMessage("Reloading");
+	}
 }
 
 function stopSimulation(context) {

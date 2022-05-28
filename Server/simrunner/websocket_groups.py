@@ -38,7 +38,7 @@ def close_websocket_group(group_name: str, close_code=None, close_message=None):
 		global__ws_groups[group_name] = __WsGroupCloseMarker(close_code, close_message)
 		
 	for client in group:
-		client.close(code=close_code)
+		client.on_websocket_group_closed()
 
 def get_close_parameters(group_name: str):
 	global global__ws_groups
@@ -80,7 +80,7 @@ def remove_websocket_from_group(group_name: str, consumer):
 		if consumer in group:
 			group.remove(consumer)
 
-def send_message_to_websocket_group(group_name: str, message_text: str):
+def send_message_to_websocket_group(group_name: str, message):
 	global global__ws_groups
 	global global__ws_group_lock
 
@@ -91,4 +91,4 @@ def send_message_to_websocket_group(group_name: str, message_text: str):
 			return
 
 		for client in group:
-			client.send(text_data=message_text)
+			client.send_client_message(message)

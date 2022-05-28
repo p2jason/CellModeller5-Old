@@ -3,12 +3,10 @@ from django.urls import path, include
 
 from . import views
 
+import simrunner.views as sm_views
+
 urlpatterns = [
 	path("", views.index),
-	path("api/saveviewer/framedata", views.frame_data),
-	path("api/saveviewer/simulationinfo", views.sim_info),
-	path("api/simrunner/stopsimulation", views.stop_simulation),
-
-	path("api/dbgservlet/reload", views.reload_simulation),
-	path("api/dbgservlet/recompile", views.recompile_simulation),
+	path("api/saveviewer/", include("saveviewer.urls")),
+	path("api/simrunner/stopsimulation", sm_views.stop_simulation),
 ]
