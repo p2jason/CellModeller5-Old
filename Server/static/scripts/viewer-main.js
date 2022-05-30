@@ -237,7 +237,6 @@ function initFrame(gl, context) {
 	const uuid = document.getElementById("uuid-field").value;
 
 	render.init(gl, context)
-		//.then(() => waitForInitialization(context, uuid))
 		.then(() => connectToSimulation(context, uuid))
 		.catch((error) => { console.log(`Error: ${error}`); });
 }

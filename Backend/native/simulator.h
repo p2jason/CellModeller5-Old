@@ -44,15 +44,20 @@ struct Simulator
 	uint32_t cellCapacity = 0;
 
 	CPUState cpuState = {};
-	GPUState gpuState = {};
-	GPUState stagingState = {};
+	GPUState cpuStateMemory = {};
+
+	GPUState gpuStates[2] = {};
+	bool gpuStateToggle = false;
 
 	bool uploadStateOnNextStep = false;
 	double lastStepTime = 0.0;
 
 	/********* Shaders *********/
 	VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-	VkDescriptorSet stateDescSet = VK_NULL_HANDLE;
+
+	VkDescriptorSetLayout stateDescLayout = VK_NULL_HANDLE;
+	VkDescriptorSet inputStateDescSet = VK_NULL_HANDLE;
+	VkDescriptorSet outputStateDescSet = VK_NULL_HANDLE;
 
 	ShaderPipeline collisionShader = {};
 

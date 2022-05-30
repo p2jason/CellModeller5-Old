@@ -1,5 +1,7 @@
 #include "gpu_device.h"
 
+#include "renderdoc/renderdoc_app.h"
+
 #include <string>
 #include <vector>
 #include <cassert>
@@ -330,6 +332,7 @@ static Result<uint32_t> findMemoryTypeIndex(GPUDevice& device, uint32_t typeBits
 Result<GPUBuffer> createGPUBuffer(GPUDevice& device, uint64_t size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProperties)
 {
 	GPUBuffer buffer = {};
+	buffer.size = size;
 
 	VkBufferCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -365,19 +368,12 @@ Result<ShaderPipeline> createShaderPipeline(GPUDevice& device, const CompiledSha
 {
 	ShaderPipeline pipeline;
 
-	VkDescriptorSetLayoutCreateInfo descSetLayoutCI = {};
-	descSetLayoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	descSetLayoutCI.bindingCount = (uint32_t)params.descriptorBindings.size();
-	descSetLayoutCI.pBindings = params.descriptorBindings.data();
-
-	VK_THROW(vkCreateDescriptorSetLayout(device.device, &descSetLayoutCI, nullptr, &pipeline.descSetLayout));
-
 	VkPipelineLayoutCreateInfo pipelineLayoutCI = {};
 	pipelineLayoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutCI.setLayoutCount = 1;
-	pipelineLayoutCI.pSetLayouts = &pipeline.descSetLayout;
+	pipelineLayoutCI.setLayoutCount = (uint32_t)params.descSetLayouts.size();
+	pipelineLayoutCI.pSetLayouts = params.descSetLayouts.data();
 	pipelineLayoutCI.pushConstantRangeCount = (uint32_t)params.pushConstans.size();
-	pipelineLayoutCI.pPushConstantRanges = params.pushConstans.size() > 0 ? params.pushConstans.data() : nullptr;
+	pipelineLayoutCI.pPushConstantRanges = params.pushConstans.data();
 
 	VK_THROW(vkCreatePipelineLayout(device.device, &pipelineLayoutCI, nullptr, &pipeline.pipelineLayout));
 
@@ -411,7 +407,6 @@ void destroyShaderPipeline(GPUDevice& device, const ShaderPipeline& shader)
 {
 	vkDestroyPipeline(device.device, shader.pipeline, nullptr);
 	vkDestroyPipelineLayout(device.device, shader.pipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(device.device, shader.descSetLayout, nullptr);
 }
 
 static const char* convertVkResultToString(VkResult result)

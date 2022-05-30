@@ -1,6 +1,7 @@
 #include "simulator.h"
 
 #include "shader_compiler.h"
+#include "frame_capture.h"
 
 #include <fstream>
 #include <iostream>
@@ -17,14 +18,11 @@ enum class CopyDirection
 	DeviceToHpst
 };
 
-static Simulator::CPUState allocateNewCPUState(uint32_t size);
-static void freeCPUState(Simulator::CPUState& state);
+static Result<void> mapGPUState(Simulator& simulator);
+static void unmapGPUState(Simulator& simulator);
 
-static Result<Simulator::GPUState> allocateNewGPUState(Simulator& simulator, uint32_t size, bool forStaging);
+static Result<Simulator::GPUState> allocateNewGPUState(Simulator& simulator, uint32_t size, bool onHost);
 static void freeGPUState(Simulator& simulator, Simulator::GPUState& state);
-
-static Result<void> copyStagingToCPU(Simulator& simulator);
-static Result<void> copyCPUToStaging(Simulator& simulator);
 
 Result<void> initSimulator(Simulator* simulator, bool withDebug)
 {
@@ -60,21 +58,40 @@ Result<void> initSimulator(Simulator* simulator, bool withDebug)
 	//Set the initial state of the simulation
 	simulator->cellCapacity = 1024;
 
-	simulator->cpuState = allocateNewCPUState(simulator->cellCapacity);
-	CM_TRY(simulator->gpuState, allocateNewGPUState(*simulator, simulator->cellCapacity, false));
-	CM_TRY(simulator->stagingState, allocateNewGPUState(*simulator, simulator->cellCapacity, true));
+	CM_TRY(simulator->cpuStateMemory, allocateNewGPUState(*simulator, simulator->cellCapacity, true));
+	CM_TRY(simulator->gpuStates[0], allocateNewGPUState(*simulator, simulator->cellCapacity, false));
+	CM_TRY(simulator->gpuStates[1], allocateNewGPUState(*simulator, simulator->cellCapacity, false));
 
-	for (int i = 0; i < 11; ++i)
+	CM_PROPAGATE_ERROR(mapGPUState(*simulator));
+
+#if 0
+	/*for (int i = 0; i < 11; ++i)
 	{
 		simulator->cpuState.positions[i] = { 0.f, 5.0f, 3.5f * (5 - i) }; //{ 0.f, 0.0f, 2.6f * (5 - i) }
 		simulator->cpuState.rotations[i] = { 3.14159265359f / 2.0f, 0.0f };
 		simulator->cpuState.sizes[i] = { 0.0f, 0.5f };
-		simulator->cpuState.colors[i] = 0xFF0000FF;
+		//simulator->cpuState.colors[i] = 0xFF0000FF;
 	}
 
-	simulator->cellCount = 11;
+	simulator->cellCount = 11;*/
+#else
+	simulator->cpuState.positions[0] = { 0.f, 2.0f, 0.0f };
+	simulator->cpuState.rotations[0] = { 0.0f, 0.0f };
+	simulator->cpuState.velocities[0] = { 0.0f, 2.0f, 0.0f };
+	simulator->cpuState.sizes[0] = { 0.0f, 1.0f };
+
+	simulator->cpuState.positions[1] = { 0.f, 8.0f, 0.0f };
+	simulator->cpuState.rotations[1] = { 0.0f, 0.0f };
+	simulator->cpuState.velocities[1] = { 0.0f, -2.0f, 0.0f };
+	simulator->cpuState.sizes[1] = { 0.0f, 1.0f };
+
+	simulator->cellCount = 2;
+#endif
 
 	simulator->uploadStateOnNextStep = true;
+
+	//Initialize frame capture
+	initFrameCapture();
 
 	return Result<void>();
 }
@@ -85,40 +102,56 @@ Result<void> importShaders(Simulator& simulator, ShaderImportCallback importCall
 	VkDevice deviceHandle = simulator.gpuDevice.device;
 
 	VkDescriptorPoolSize poolSizes[1] = {};
-	poolSizes[0] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4 };
+	poolSizes[0] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8 };
 
 	VkDescriptorPoolCreateInfo poolCI = {};
 	poolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolCI.maxSets = 1;
+	poolCI.maxSets = 2;
 	poolCI.poolSizeCount = sizeof(poolSizes) / sizeof(poolSizes[0]);
 	poolCI.pPoolSizes = poolSizes;
 
 	VK_THROW(vkCreateDescriptorPool(deviceHandle, &poolCI, nullptr, &simulator.descriptorPool));
 
+	/*********** State descriptor set ***********/
+	{
+		VkDescriptorSetLayoutBinding layoutBindings[] = {
+			{ 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr },
+			{ 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr },
+			{ 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr },
+			{ 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr },
+		};
+
+		VkDescriptorSetLayoutCreateInfo descSetLayoutCI = {};
+		descSetLayoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		descSetLayoutCI.bindingCount = (uint32_t)(sizeof(layoutBindings) / sizeof(layoutBindings[0]));
+		descSetLayoutCI.pBindings = layoutBindings;
+
+		VK_THROW(vkCreateDescriptorSetLayout(deviceHandle, &descSetLayoutCI, nullptr, &simulator.stateDescLayout));
+
+		VkDescriptorSetAllocateInfo allocInfo = {};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = simulator.descriptorPool;
+		allocInfo.descriptorSetCount = 1;
+		allocInfo.pSetLayouts = &simulator.stateDescLayout;
+
+		VK_THROW(vkAllocateDescriptorSets(deviceHandle, &allocInfo, &simulator.inputStateDescSet));
+		VK_THROW(vkAllocateDescriptorSets(deviceHandle, &allocInfo, &simulator.outputStateDescSet));
+	}
+
 	/*********** Collision detection shader ***********/
 	PipelineParameters params = {};
-	params.descriptorBindings.push_back({ 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
-	params.descriptorBindings.push_back({ 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
-	params.descriptorBindings.push_back({ 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
-	params.descriptorBindings.push_back({ 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
+	params.descSetLayouts.push_back(simulator.stateDescLayout);
+	params.descSetLayouts.push_back(simulator.stateDescLayout);
 
 	params.pushConstans.push_back({ VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(GlobalConsts) });
 
 	CM_TRY(auto& compiled, compileShaderSpirV(importCallback("shaders/collision_shader.glsl"), "shaders/collision_shader.glsl"));
 	CM_TRY(simulator.collisionShader, createShaderPipeline(simulator.gpuDevice, compiled, params));
 
-	VkDescriptorSetAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.descriptorPool = simulator.descriptorPool;
-	allocInfo.descriptorSetCount = 1;
-	allocInfo.pSetLayouts = &simulator.collisionShader.descSetLayout;
-
-	VK_THROW(vkAllocateDescriptorSets(deviceHandle, &allocInfo, &simulator.stateDescSet));
-
 	return Result<void>();
 }
 
-void deinitSimulator(Simulator& simulator)
+static void destroyShaders(Simulator& simulator)
 {
 	VkDevice deviceHandle = simulator.gpuDevice.device;
 
@@ -127,7 +160,19 @@ void deinitSimulator(Simulator& simulator)
 		vkDestroyDescriptorPool(deviceHandle, simulator.descriptorPool, nullptr);
 	}
 
+	if (simulator.stateDescLayout != VK_NULL_HANDLE)
+	{
+		vkDestroyDescriptorSetLayout(deviceHandle, simulator.stateDescLayout, nullptr);
+	}
+
 	destroyShaderPipeline(simulator.gpuDevice, simulator.collisionShader);
+}
+
+void deinitSimulator(Simulator& simulator)
+{
+	VkDevice deviceHandle = simulator.gpuDevice.device;
+
+	destroyShaders(simulator);
 
 	if (simulator.submitFinishedFence != VK_NULL_HANDLE)
 	{
@@ -139,9 +184,11 @@ void deinitSimulator(Simulator& simulator)
 		vkDestroyQueryPool(deviceHandle, simulator.timingQueryPool, nullptr);
 	}
 
-	freeCPUState(simulator.cpuState);
-	freeGPUState(simulator, simulator.gpuState);
-	freeGPUState(simulator, simulator.stagingState);
+	unmapGPUState(simulator);
+
+	freeGPUState(simulator, simulator.cpuStateMemory);
+	freeGPUState(simulator, simulator.gpuStates[0]);
+	freeGPUState(simulator, simulator.gpuStates[1]);
 
 	deinitGPUDevice(simulator.gpuDevice);
 	deinitGPUContext(simulator.gpuContext);
@@ -153,9 +200,48 @@ static uint32_t workgroupCount(uint32_t threadCount, uint32_t groupSize)
 	return (m ? (threadCount + groupSize - m) : threadCount) / groupSize;
 }
 
+static void updateStateSet(Simulator& simulator, Simulator::GPUState& state, VkDescriptorSet descSet)
+{
+	VkDescriptorBufferInfo bufferWrites[8] = {};
+	bufferWrites[0].buffer = state.positions.buffer;
+	bufferWrites[0].range = simulator.cellCount * sizeof(vec3);
+
+	bufferWrites[1].buffer = state.rotations.buffer;
+	bufferWrites[1].range = simulator.cellCount * sizeof(vec2);
+
+	bufferWrites[2].buffer = state.sizes.buffer;
+	bufferWrites[2].range = simulator.cellCount * sizeof(vec2);
+
+	bufferWrites[3].buffer = state.velocities.buffer;
+	bufferWrites[3].range = simulator.cellCount * sizeof(vec3);
+
+	VkWriteDescriptorSet descSetWrites[4] = {};
+
+	for (int i = 0; i < 4; ++i)
+	{
+		descSetWrites[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descSetWrites[i].dstSet = descSet;
+		descSetWrites[i].dstBinding = i;
+		descSetWrites[i].dstArrayElement = 0;
+		descSetWrites[i].descriptorCount = 1;
+		descSetWrites[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		descSetWrites[i].pBufferInfo = &bufferWrites[i];
+	}
+
+	vkUpdateDescriptorSets(simulator.gpuDevice.device, sizeof(descSetWrites) / sizeof(descSetWrites[0]), descSetWrites, 0, nullptr);
+}
+
 Result<void> stepSimulator(Simulator& simulator)
 {
+	//This is used to automatically start/stop frame capture
+	FrameCaptureScope frameCapture;
+
 	GPUDevice& device = simulator.gpuDevice;
+
+	Simulator::GPUState& inputState = simulator.gpuStates[simulator.gpuStateToggle ? 0 : 1];
+	Simulator::GPUState& outputState = simulator.gpuStates[simulator.gpuStateToggle ? 1 : 0];
+
+	simulator.gpuStateToggle = !simulator.gpuStateToggle;
 
 	GlobalConsts consts = {};
 	consts.cellCount = simulator.cellCount;
@@ -166,37 +252,8 @@ Result<void> stepSimulator(Simulator& simulator)
 	///////////////////////////////////////////////////////////////
 	// Update descriptor sets
 	///////////////////////////////////////////////////////////////
-	VkDescriptorBufferInfo bufferWriteInfos[4] = {};
-	bufferWriteInfos[0].buffer = simulator.gpuState.positions.buffer;
-	bufferWriteInfos[0].offset = 0;
-	bufferWriteInfos[0].range = simulator.cellCount * sizeof(vec3);
-
-	bufferWriteInfos[1].buffer = simulator.gpuState.rotations.buffer;
-	bufferWriteInfos[1].offset = 0;
-	bufferWriteInfos[1].range = simulator.cellCount * sizeof(vec2);
-
-	bufferWriteInfos[2].buffer = simulator.gpuState.sizes.buffer;
-	bufferWriteInfos[2].offset = 0;
-	bufferWriteInfos[2].range = simulator.cellCount * sizeof(vec2);
-
-	bufferWriteInfos[3].buffer = simulator.gpuState.velocities.buffer;
-	bufferWriteInfos[3].offset = 0;
-	bufferWriteInfos[3].range = simulator.cellCount * sizeof(vec3);
-
-	VkWriteDescriptorSet descSetWrites[4] = {};
-
-	for (int i = 0; i < 4; ++i)
-	{
-		descSetWrites[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descSetWrites[i].dstSet = simulator.stateDescSet;
-		descSetWrites[i].dstBinding = i;
-		descSetWrites[i].dstArrayElement = 0;
-		descSetWrites[i].descriptorCount = 1;
-		descSetWrites[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		descSetWrites[i].pBufferInfo = &bufferWriteInfos[i];
-	}
-
-	vkUpdateDescriptorSets(device.device, sizeof(descSetWrites) / sizeof(descSetWrites[0]), descSetWrites, 0, nullptr);
+	updateStateSet(simulator, inputState, simulator.inputStateDescSet);
+	updateStateSet(simulator, outputState, simulator.outputStateDescSet);
 
 	///////////////////////////////////////////////////////////////
 	// Perform a step
@@ -226,15 +283,26 @@ Result<void> stepSimulator(Simulator& simulator)
 
 	if (simulator.uploadStateOnNextStep)
 	{
-		copyCPUToStaging(simulator);
-
-		vkCmdCopyBuffer(device.commandBuffer, simulator.stagingState.positions.buffer, simulator.gpuState.positions.buffer, 1, &copyRegions[0]);
-		vkCmdCopyBuffer(device.commandBuffer, simulator.stagingState.rotations.buffer, simulator.gpuState.rotations.buffer, 1, &copyRegions[1]);
-		vkCmdCopyBuffer(device.commandBuffer, simulator.stagingState.sizes.buffer, simulator.gpuState.sizes.buffer, 1, &copyRegions[2]);
-		vkCmdCopyBuffer(device.commandBuffer, simulator.stagingState.velocities.buffer, simulator.gpuState.velocities.buffer, 1, &copyRegions[3]);
+		//Copy the CPU state to the input state on the GPU
+		vkCmdCopyBuffer(device.commandBuffer, simulator.cpuStateMemory.positions.buffer, inputState.positions.buffer, 1, &copyRegions[0]);
+		vkCmdCopyBuffer(device.commandBuffer, simulator.cpuStateMemory.rotations.buffer, inputState.rotations.buffer, 1, &copyRegions[1]);
+		vkCmdCopyBuffer(device.commandBuffer, simulator.cpuStateMemory.sizes.buffer, inputState.sizes.buffer, 1, &copyRegions[2]);
+		vkCmdCopyBuffer(device.commandBuffer, simulator.cpuStateMemory.velocities.buffer, inputState.velocities.buffer, 1, &copyRegions[3]);
 
 		VkMemoryBarrier memoryBarrier = {};
 		memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+		memoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		memoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+		vkCmdPipelineBarrier(device.commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+							 1, &memoryBarrier, 0, nullptr, 0, nullptr);
+
+		//Copy the input state to the output state. This is done just in case some shader doesn't write to the output state.
+		vkCmdCopyBuffer(device.commandBuffer, inputState.positions.buffer, outputState.positions.buffer, 1, &copyRegions[0]);
+		vkCmdCopyBuffer(device.commandBuffer, inputState.rotations.buffer, outputState.rotations.buffer, 1, &copyRegions[1]);
+		vkCmdCopyBuffer(device.commandBuffer, inputState.sizes.buffer, outputState.sizes.buffer, 1, &copyRegions[2]);
+		vkCmdCopyBuffer(device.commandBuffer, inputState.velocities.buffer, outputState.velocities.buffer, 1, &copyRegions[3]);
+
 		memoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		memoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
@@ -246,7 +314,8 @@ Result<void> stepSimulator(Simulator& simulator)
 
 	// Run collision detection and accumulate forces
 	vkCmdBindPipeline(device.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, simulator.collisionShader.pipeline);
-	vkCmdBindDescriptorSets(device.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, simulator.collisionShader.pipelineLayout, 0, 1, &simulator.stateDescSet, 0, nullptr);
+	vkCmdBindDescriptorSets(device.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, simulator.collisionShader.pipelineLayout, 0, 1, &simulator.inputStateDescSet, 0, nullptr);
+	vkCmdBindDescriptorSets(device.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, simulator.collisionShader.pipelineLayout, 1, 1, &simulator.outputStateDescSet, 0, nullptr);
 	
 	vkCmdPushConstants(device.commandBuffer, simulator.collisionShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(GlobalConsts), &consts);
 
@@ -263,10 +332,10 @@ Result<void> stepSimulator(Simulator& simulator)
 	vkCmdPipelineBarrier(device.commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
 						 1, &memoryBarrier, 0, nullptr, 0, nullptr);
 
-	vkCmdCopyBuffer(device.commandBuffer, simulator.gpuState.positions.buffer, simulator.stagingState.positions.buffer, 1, &copyRegions[0]);
-	vkCmdCopyBuffer(device.commandBuffer, simulator.gpuState.rotations.buffer, simulator.stagingState.rotations.buffer, 1, &copyRegions[1]);
-	vkCmdCopyBuffer(device.commandBuffer, simulator.gpuState.sizes.buffer, simulator.stagingState.sizes.buffer, 1, &copyRegions[2]);
-	vkCmdCopyBuffer(device.commandBuffer, simulator.gpuState.velocities.buffer, simulator.stagingState.velocities.buffer, 1, &copyRegions[3]);
+	vkCmdCopyBuffer(device.commandBuffer, outputState.positions.buffer, simulator.cpuStateMemory.positions.buffer, 1, &copyRegions[0]);
+	vkCmdCopyBuffer(device.commandBuffer, outputState.rotations.buffer, simulator.cpuStateMemory.rotations.buffer, 1, &copyRegions[1]);
+	vkCmdCopyBuffer(device.commandBuffer, outputState.sizes.buffer, simulator.cpuStateMemory.sizes.buffer, 1, &copyRegions[2]);
+	vkCmdCopyBuffer(device.commandBuffer, outputState.velocities.buffer, simulator.cpuStateMemory.velocities.buffer, 1, &copyRegions[3]);
 
 	//Write second timestamp
 	vkCmdWriteTimestamp(device.commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, simulator.timingQueryPool, 1);
@@ -292,23 +361,16 @@ Result<void> stepSimulator(Simulator& simulator)
 
 	if (simulator.queueWaitEnd) simulator.queueWaitEnd();
 
-	///////////////////////////////////////////////////////////////
-	// Copy staging to CPU state (probably)
-	///////////////////////////////////////////////////////////////
-	// Note(Jason): When copying results of very large simulations, this can become a pretty
-	// big bottleneck. We may want to consider copying the data only occasionally or not at all
-	copyStagingToCPU(simulator);
-
 	//Calculate the time it took for the step to complete
 	uint64_t timestamps[2];
 	VK_CHECK(vkGetQueryPoolResults(device.device, simulator.timingQueryPool, 0, 2, sizeof(timestamps), timestamps, sizeof(timestamps[0]), VK_QUERY_RESULT_64_BIT));
 
-	const uint32_t timestampValidBits = simulator.gpuDevice.queueProperties.timestampValidBits;
-	const double timestampPeriod = (double)simulator.gpuDevice.properties.limits.timestampPeriod;
+	uint32_t timestampValidBits = simulator.gpuDevice.queueProperties.timestampValidBits;
+	double timestampPeriod = (double)simulator.gpuDevice.properties.limits.timestampPeriod;
 
-	const uint64_t timestampMask = timestampValidBits >= (sizeof(uint64_t) * 8) ? ~((uint64_t)0) : ((uint64_t)1 << timestampValidBits) - (uint64_t)(1);
-	const double startTimestamp = (timestamps[0] & timestampMask) * timestampPeriod;
-	const double endTimestamp = (timestamps[1] & timestampMask) * timestampPeriod;
+	uint64_t timestampMask = timestampValidBits >= (sizeof(uint64_t) * 8) ? ~((uint64_t)0) : ((uint64_t)1 << timestampValidBits) - (uint64_t)(1);
+	double startTimestamp = (timestamps[0] & timestampMask) * timestampPeriod;
+	double endTimestamp = (timestamps[1] & timestampMask) * timestampPeriod;
 
 	simulator.lastStepTime = (endTimestamp - startTimestamp) / 1e9;
 
@@ -348,19 +410,21 @@ Result<void> writeSimulatorStateToVizFile(Simulator& simulator, std::string file
 
 		bufferAsFloat = (float*)buffer;
 
+		vec3 pos = simulator.cpuState.positions[i];
 		vec3 dir = directionFromAngles(simulator.cpuState.rotations[i]);
+		vec2 size = simulator.cpuState.sizes[i];
 
-		*(bufferAsFloat++) = simulator.cpuState.positions[i].x;
-		*(bufferAsFloat++) = simulator.cpuState.positions[i].y;
-		*(bufferAsFloat++) = simulator.cpuState.positions[i].z;
+		*(bufferAsFloat++) = pos.x;
+		*(bufferAsFloat++) = pos.y;
+		*(bufferAsFloat++) = pos.z;
 
 		*(bufferAsFloat++) = dir.x;
 		*(bufferAsFloat++) = dir.y;
 		*(bufferAsFloat++) = dir.z;
 
-		*(bufferAsFloat++) = simulator.cpuState.sizes[i].x;
-		*(bufferAsFloat++) = simulator.cpuState.sizes[i].y;
-		*(bufferAsUInt++) = simulator.cpuState.colors[i];
+		*(bufferAsFloat++) = size.x;
+		*(bufferAsFloat++) = size.y;
+		*(bufferAsUInt++) = 0xFF0000FF;//simulator.cpuState.colors[i];
 
 		out.write((const char*)buffer, sizeof(buffer));
 	}
@@ -370,33 +434,34 @@ Result<void> writeSimulatorStateToVizFile(Simulator& simulator, std::string file
 	return Result<void>();
 }
 
-Simulator::CPUState allocateNewCPUState(uint32_t size)
+Result<void> mapGPUState(Simulator& simulator)
 {
-	Simulator::CPUState state = {};
-	state.positions = new vec3[size];
-	state.rotations = new vec2[size];
-	state.sizes = new vec2[size];
-	state.velocities = new vec3[size];
-	state.colors = new uint32_t[size];
+	VkDevice device = simulator.gpuDevice.device;
 
-	return state;
+	VK_THROW(vkMapMemory(device, simulator.cpuStateMemory.positions.memory, 0, simulator.cpuStateMemory.positions.size, 0, (void**)&simulator.cpuState.positions));
+	VK_THROW(vkMapMemory(device, simulator.cpuStateMemory.rotations.memory, 0, simulator.cpuStateMemory.rotations.size, 0, (void**)&simulator.cpuState.rotations));
+	VK_THROW(vkMapMemory(device, simulator.cpuStateMemory.sizes.memory, 0, simulator.cpuStateMemory.sizes.size, 0, (void**)&simulator.cpuState.sizes));
+	VK_THROW(vkMapMemory(device, simulator.cpuStateMemory.velocities.memory, 0, simulator.cpuStateMemory.velocities.size, 0, (void**)&simulator.cpuState.velocities));
+
+	return Result<void>();
 }
 
-void freeCPUState(Simulator::CPUState& state)
+void unmapGPUState(Simulator& simulator)
 {
-	delete[] state.positions;
-	delete[] state.rotations;
-	delete[] state.sizes;
-	delete[] state.velocities;
-	delete[] state.colors;
+	VkDevice device = simulator.gpuDevice.device;
+
+	vkUnmapMemory(device, simulator.cpuStateMemory.positions.memory);
+	vkUnmapMemory(device, simulator.cpuStateMemory.rotations.memory);
+	vkUnmapMemory(device, simulator.cpuStateMemory.sizes.memory);
+	vkUnmapMemory(device, simulator.cpuStateMemory.velocities.memory);
 }
 
-Result<Simulator::GPUState> allocateNewGPUState(Simulator& simulator, uint32_t size, bool forStaging)
+Result<Simulator::GPUState> allocateNewGPUState(Simulator& simulator, uint32_t size, bool onHost)
 {
 	VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 	VkMemoryPropertyFlags memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-	if (forStaging)
+	if (onHost)
 	{
 		usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
@@ -417,56 +482,4 @@ void freeGPUState(Simulator& simulator, Simulator::GPUState& state)
 	destroyGPUBuffer(simulator.gpuDevice, state.rotations);
 	destroyGPUBuffer(simulator.gpuDevice, state.sizes);
 	destroyGPUBuffer(simulator.gpuDevice, state.velocities);
-}
-
-Result<void> copyStagingToCPU(Simulator& simulator)
-{
-	VkDevice deviceHandle = simulator.gpuDevice.device;
-	Simulator::GPUState& gpuState = simulator.gpuState;
-	Simulator::CPUState& cpuState = simulator.cpuState;
-
-	auto copyMemory = [&](VkDeviceMemory source, void* dest, size_t copyAmount) -> Result<void>
-	{
-		void* mem = nullptr;
-		VK_THROW(vkMapMemory(deviceHandle, source, 0, copyAmount, 0, &mem));
-
-		memcpy(dest, mem, copyAmount);
-
-		vkUnmapMemory(deviceHandle, source);
-
-		return Result<void>();
-	};
-
-	CM_PROPAGATE_ERROR(copyMemory(simulator.stagingState.positions.memory, simulator.cpuState.positions, simulator.cellCount * sizeof(vec3)));
-	CM_PROPAGATE_ERROR(copyMemory(simulator.stagingState.rotations.memory, simulator.cpuState.rotations, simulator.cellCount * sizeof(vec2)));
-	CM_PROPAGATE_ERROR(copyMemory(simulator.stagingState.sizes.memory, simulator.cpuState.sizes, simulator.cellCount * sizeof(vec2)));
-	CM_PROPAGATE_ERROR(copyMemory(simulator.stagingState.velocities.memory, simulator.cpuState.velocities, simulator.cellCount * sizeof(vec3)));
-
-	return Result<void>();
-}
-
-Result<void> copyCPUToStaging(Simulator& simulator)
-{
-	VkDevice deviceHandle = simulator.gpuDevice.device;
-	Simulator::GPUState& gpuState = simulator.gpuState;
-	Simulator::CPUState& cpuState = simulator.cpuState;
-
-	auto copyMemory = [&](void* source, VkDeviceMemory dest, size_t copyAmount) -> Result<void>
-	{
-		void* mem = nullptr;
-		VK_THROW(vkMapMemory(deviceHandle, dest, 0, copyAmount, 0, &mem));
-
-		memcpy(mem, source, copyAmount);
-
-		vkUnmapMemory(deviceHandle, dest);
-
-		return Result<void>();
-	};
-
-	CM_PROPAGATE_ERROR(copyMemory(simulator.cpuState.positions, simulator.stagingState.positions.memory, simulator.cellCount * sizeof(vec3)));
-	CM_PROPAGATE_ERROR(copyMemory(simulator.cpuState.rotations, simulator.stagingState.rotations.memory, simulator.cellCount * sizeof(vec2)));
-	CM_PROPAGATE_ERROR(copyMemory(simulator.cpuState.sizes, simulator.stagingState.sizes.memory, simulator.cellCount * sizeof(vec2)));
-	CM_PROPAGATE_ERROR(copyMemory(simulator.cpuState.velocities, simulator.stagingState.velocities.memory, simulator.cellCount * sizeof(vec3)));
-
-	return Result<void>();
 }

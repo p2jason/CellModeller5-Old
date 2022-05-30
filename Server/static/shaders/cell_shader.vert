@@ -57,10 +57,10 @@ void main() {
 	//Write varyings
 	gl_Position = u_MvpMatrix * worldPos;
 
-	v_CellEnd0 = vec3(modelMatrix * vec4(0.0,  totalLength - 1.0, 0.0, 1.0));
-	v_CellEnd1 = vec3(modelMatrix * vec4(0.0, -totalLength + 1.0, 0.0, 1.0));
+	v_CellEnd0 = vec3(modelMatrix * vec4(0.0,  a_Length, 0.0, 1.0));
+	v_CellEnd1 = vec3(modelMatrix * vec4(0.0, -a_Length, 0.0, 1.0));
 
 	v_WorldPos = worldPos.xyz;
-//	v_Normal = rotMatrix * a_Normal;
 	v_Color = a_Color.xyz;
+	v_Radius = a_Radius;
 }

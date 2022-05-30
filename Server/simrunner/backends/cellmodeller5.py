@@ -22,7 +22,7 @@ class CellModeller5Backend(SimulationBackend):
 	def step(self):
 		self.simulator.step()
 
-		time.sleep(0.2)
+		time.sleep(0.12)
 
 	def write_step_files(self):
 		base_file_name = "step-%05i" % self.simulator.get_step_index()

@@ -45,12 +45,12 @@ struct ShaderPipeline
 	//Normaly, you'd want to have multiple descriptor sets per pipeline.
 	//However, in this case, most shaders will probably be fine with just
 	//using one descriptor set.
-	VkDescriptorSetLayout descSetLayout = VK_NULL_HANDLE;
+	//VkDescriptorSetLayout descSetLayout = VK_NULL_HANDLE;
 };
 
 struct PipelineParameters
 {
-	std::vector<VkDescriptorSetLayoutBinding> descriptorBindings;
+	std::vector<VkDescriptorSetLayout> descSetLayouts;
 	std::vector<VkPushConstantRange> pushConstans;
 };
 
@@ -58,6 +58,7 @@ struct GPUBuffer
 {
 	VkBuffer buffer = VK_NULL_HANDLE;
 	VkDeviceMemory memory = VK_NULL_HANDLE;
+	uint64_t size = 0;
 };
 
 Result<void> initGPUContext(GPUContext* context, bool withDebug = false);
