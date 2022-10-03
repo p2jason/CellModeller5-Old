@@ -95,7 +95,7 @@ html, body {
 	display: none;
 }
 
-#init-log-container {
+#message-log-container {
 	width: 30rem;
 	height: 32rem;
 	
@@ -109,7 +109,7 @@ html, body {
 	display: none;
 }
 
-#init-log-container div {
+#message-log-container div {
 	width: 100%;
 	height: 100%;
 
@@ -117,11 +117,11 @@ html, body {
 	flex-direction: column;
 }
 
-#init-log-container div p {
+#message-log-container div p {
 	margin-bottom: 0.3rem;
 }
 
-#init-log-text {
+#message-log-text {
 	width: 100%;
 	height: auto;
 	box-sizing: border-box;

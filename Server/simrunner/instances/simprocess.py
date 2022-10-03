@@ -146,18 +146,19 @@ def instance_control_thread(pipe, params):
 			log_stream.flush()
 
 		backend.shutdown()
+
+		# Clean up instance
+		out_stream.write(f"[INSTANCE PROCESS]: Closing instance process\n")
+
+		endpoint.send_item(InstanceMessage(InstanceAction.CLOSE, { "abrupt": False }))
+		endpoint.shutdown()
 	except Exception as e:
 		exc_message = traceback.format_exc()
 		out_stream.write(exc_message)
+		out_stream.write(f"[INSTANCE PROCESS]: Instance process terminated due to exception\n")
 
-		endpoint.send_item(InstanceMessage(InstanceAction.ERROR_MESSAGE, str(e)))
+		endpoint.send_item(InstanceMessage(InstanceAction.ERROR_MESSAGE, str(exc_message)))
 		endpoint.send_item(InstanceMessage(InstanceAction.CLOSE, { "abrupt": True }))
 		endpoint.shutdown()
-
-	# Clean up instance
-	out_stream.write(f"[INSTANCE PROCESS]: Closing instance process\n")
-
-	endpoint.send_item(InstanceMessage(InstanceAction.CLOSE, { "abrupt": False }))
-	endpoint.shutdown()
 
 	log_stream.close()

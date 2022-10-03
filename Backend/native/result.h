@@ -38,7 +38,7 @@ public:
 
 #define CM_ERROR_MESSAGE(msg) ErrorMessage{ (msg) }
 #define CM_IS_RESULT_FAILURE(r) (r.index() == 0)
-#define CM_PROPAGATE_ERROR(r) if (CM_IS_RESULT_FAILURE(r)) { return std::get<0>(r); }
+#define CM_PROPAGATE_ERROR(x) { auto r = (x); if (CM_IS_RESULT_FAILURE(r)) return std::get<0>(r); }
 #define CM_THROW_ERROR(r) if (CM_IS_RESULT_FAILURE(r)) { throw std::runtime_error(CM_RESULT_ERROR(r).message); }
 #define CM_RESULT_VALUE(r) std::get<1>(r)
 #define CM_RESULT_ERROR(r) std::get<0>(r)

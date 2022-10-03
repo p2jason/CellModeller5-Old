@@ -9,6 +9,7 @@ function createShader(gl, vsSource, fsSource, uniforms) {
 	
 	if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
 		alert("Vertex shader error: " + gl.getShaderInfoLog(vertexShader));
+
 		gl.deleteShader(vertexShader);
 		
 		return null;
@@ -16,6 +17,8 @@ function createShader(gl, vsSource, fsSource, uniforms) {
 	
 	if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
 		alert("Fragment shader error: " + gl.getShaderInfoLog(fragmentShader));
+
+		gl.deleteShader(vertexShader);
 		gl.deleteShader(fragmentShader);
 		
 		return null;
@@ -28,6 +31,11 @@ function createShader(gl, vsSource, fsSource, uniforms) {
 	
 	if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
 		alert("Shader linking error: " + gl.getProgramInfoLog(shaderProgram));
+
+		gl.deleteShader(vertexShader);
+		gl.deleteShader(fragmentShader);
+		gl.deleteProgram(shaderProgram);
+
 		return null;
 	}
 	

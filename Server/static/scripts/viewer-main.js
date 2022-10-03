@@ -17,20 +17,21 @@ function setButtonContainerDisplay(display) {
 }
 
 /****** Init log ******/
-function openInitLogWindow() {
-	document.getElementById("init-log-container").style.display = "inline";
+function openInitLogWindow(title) {
+	document.getElementById("message-log-title").innerText = title;
+	document.getElementById("message-log-container").style.display = "inline";
 }
 
 function closeInitLogWindow(clear) {
-	document.getElementById("init-log-container").style.display = "none";
+	document.getElementById("message-log-container").style.display = "none";
 
 	if (close) {
-		document.getElementById("init-log-text").value = "";
+		document.getElementById("message-log-text").value = "";
 	}
 }
 
 function appendInitLogMessage(message) {
-	var textArea = document.getElementById("init-log-text");
+	var textArea = document.getElementById("message-log-text");
 
 	if (textArea.value.length > 0) {
 		textArea.value += "\n";
@@ -50,6 +51,7 @@ function requestFrame(context, uuid, index) {
 		})
 		.then(buffer => {
 			if (context["currentIndex"] != index) {
+				//TODO:
 				//console.log("Skipping frame");
 				//return;
 			}
@@ -126,8 +128,13 @@ function connectToServer(context) {
 					context["timelineSlider"].value = frameCount;
 				}
 			} else if (action === "infolog") {
-				openInitLogWindow();
+				openInitLogWindow("Initialization Log");
 				appendInitLogMessage(data);
+			} else if (action === "error_message") {
+				openInitLogWindow("Error Log");
+				appendInitLogMessage(data);
+
+				setStatusMessage("Fatal Error");
 			} else if (action === "closeinfolog") {
 				closeInitLogWindow(true);
 			} else if (action === "simstopped") {
@@ -209,7 +216,7 @@ function initFrame(gl, context) {
 	};
 
 	//Initialize timeline slider 
-	var timelineSlider = document.getElementById("frame-timeline");
+	const timelineSlider = document.getElementById("frame-timeline");
 	timelineSlider.oninput = function() { processTimelineChange(this.value, context); };
 	timelineSlider.min = 1;
 	timelineSlider.max = 1;
@@ -218,15 +225,15 @@ function initFrame(gl, context) {
 
 	context["timelineSlider"] = timelineSlider;
 
-	var snapToLastCheckbox = document.getElementById("snap-to-last");
+	const snapToLastCheckbox = document.getElementById("snap-to-last");
 	snapToLastCheckbox.onchange = function(event) { context["alwaysUseLatestStep"] = this.checked; };
 
 	context["alwaysUseLatestStep"] = snapToLastCheckbox.checked;
 
-	var recompileBtn = document.getElementById("recompile-btn");
+	const recompileBtn = document.getElementById("recompile-btn");
 	if (recompileBtn !== null) recompileBtn.onclick = function(event) { recompileDevSimulation(context); };
 
-	var reloadBtn = document.getElementById("reload-btn");
+	const reloadBtn = document.getElementById("reload-btn");
 	if (reloadBtn !== null) reloadBtn.onclick = function(event) { reloadDevSimulation(context); };
 
 	document.getElementById("stop-btn").onclick = function(event) { stopSimulation(context); };

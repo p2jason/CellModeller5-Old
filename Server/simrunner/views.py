@@ -1,8 +1,6 @@
 from django.shortcuts import render
-from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFound, HttpResponseNotAllowed
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotAllowed
 from django.views.decorators.csrf import csrf_exempt
-
-from . import apps
 
 from .instances.manager import spawn_simulation, spawn_simulation_from_branch, kill_simulation
 from .instances.simprocess import SimulationProcess

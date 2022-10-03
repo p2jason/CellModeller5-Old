@@ -1,111 +1,90 @@
-<!DOCTYPE html>
-<html>
-<head>
-	<script>
-		function submitCreateForm() {
-			var name = "This is the name";
-			var source = document.getElementById("sim-script-text").value;
-			var backend = {
-				"version": "CellModeller4",
-				"url": "https://github.com/HaseloffLab/CellModeller.git",
-				"branch": "master"
-			};
+{% extends "background-wall.html" %}
 
-			//backend = "CellModeller4";
+{% block header %}
+<script src="/static/scripts/index-script.js" type="module"></script>
+<link rel="stylesheet" href="/static/index-stylesheet.css"/>
+{% endblock %}
 
-			fetch("/api/simrunner/createnewsimulation", {
-				method: "POST",
-				headers: {
-					"Accept": "text/plain",
-					"Content-Type": "text/plain",
-				},
-				body: JSON.stringify({
-					"name": name,
-					"source": source,
-					"backend": backend
-				})
-			})
-			.then(response => {
-				if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
-				return response.text();
-			})
-			.then((uuid) => {
-				window.location.href = `http://localhost:8000/view/${uuid}/`;
-			})
-			.catch((error) => {
-				console.log(`Error when creating new simulation: ${error}`)
-			});
-		}
-	</script>
-</head>
-<body>
-	<textarea id="sim-script-text" style="width: 40rem; height: 50rem;">
-import random
-from CellModeller.Regulation.ModuleRegulator import ModuleRegulator
-from CellModeller.Biophysics.BacterialModels.CLBacterium import CLBacterium
-from CellModeller.GUI import Renderers
-import numpy
-import math
-
-N0 = 10
-
-def setup(sim):
-    # Set biophysics, signalling, and regulation models
-    biophys = CLBacterium(sim, jitter_z=False, gamma = 100, max_cells=100000, max_planes=1)
-
-    regul = ModuleRegulator(sim, sim.moduleName)	# use this file for reg too
-    # Only biophys and regulation
-    sim.init(biophys, regul, None, None)
-
-    #biophys.addPlane((0,0,0),(0,0,1),1.0) #Base plane
-    #biophys.addPlane((10,0,0),(-1,0,0),1.0)
-    #biophys.addPlane((-10,0,0),(1,0,0),1.0)
-    #biophys.addPlane((0,10,0),(0,-1,0),1.0)
-    #biophys.addPlane((0,-10,0),(0,1,0),1.0)
-
-    sim.addCell(cellType=0, pos=(0,0,0))
-
-    # Add some objects to draw the models
-    therenderer = Renderers.GLBacteriumRenderer(sim)
-    sim.addRenderer(therenderer)
-    sim.pickleSteps = 1
-
-def init(cell):
-    cell.targetVol = 3.5 + random.uniform(0.0,0.5)
-    cell.growthRate = 1.0
-    cell.n_a = N0//2
-    cell.n_b = N0 - cell.n_a
-
-def update(cells):
-    for (id, cell) in cells.items():
-        cell.color = [0.1, cell.n_a/3.0, cell.n_b/3.0]
-        if cell.volume > cell.targetVol:
-            cell.divideFlag = True
-
-def divide(parent, d1, d2):
-    d1.targetVol = 3.5 + random.uniform(0.0,0.5)
-    d2.targetVol = 3.5 + random.uniform(0.0,0.5)
-    plasmids = [0]*parent.n_a*2 + [1]*parent.n_b*2
-    random.shuffle(plasmids)
-    d1.n_a = 0
-    d1.n_b = 0
-    d2.n_a = 0
-    d2.n_b = 0
-    for p in plasmids[:N0]:
-        if p == 0: d1.n_a +=1
-        else: d1.n_b +=1
-    for p in plasmids[N0:2*N0]:
-        if p == 0: d2.n_a +=1
-        else: d2.n_b +=1
-    assert parent.n_a + parent.n_b == N0
-    assert d1.n_a + d1.n_b == N0
-    assert d2.n_a + d2.n_b == N0
-    assert parent.n_a*2 == d1.n_a+d2.n_a
-    assert parent.n_b*2 == d1.n_b+d2.n_b
-    assert parent.n_a > 0 or (d1.n_a == 0 and d2.n_a == 0)
-    assert parent.n_b > 0 or (d1.n_b == 0 and d2.n_b == 0)
-	</textarea>
-	<br/>
-	<button type="submit" onclick="submitCreateForm()">Create</button>
-</body>
-</html>
+{% block content %}
+<div id="content-root">
+    <div id="main-content">
+        <div id="tab-container">
+            <div class="tab-item hidden-tab">
+                <p>Select Simulation</p>
+            </div>
+            <div class="tab-item">
+                <p>Create Simulation</p>
+            </div>
+            <div class="tab-item hidden-tab">
+                <p>User Account</p>
+            </div>
+        </div>
+        <div id="tab-window">
+            <div class="tab-frame inactive-frame">
+                
+            </div>
+            <div id="create-sim-frame" class="tab-frame">
+                <div id="create-form-container">
+                    <div id="create-form">
+                        {% csrf_token %}
+    
+                        <div class="row-fill">
+                            <div class="row-element">
+                                <label for="name">Simulation Name</label> 
+                                <input type="text" placeholder="Simulation Name" id="input-create-name" name="name">
+                            </div>
+                            <div class="row-element row-padding"></div>
+                            <div class="row-element">
+                                <label>Backend Version</label> 
+                                <form class="radio-flip">
+                                    <div>
+                                        <label for="input-radio-cm4">
+                                            <input id="input-radio-cm4" class="" type="radio" name="version" value="CellModeller4" checked>
+                                            <div>CellModeller4</div>
+                                        </label>
+                                        <label for="input-radio-cm5">
+                                            <input id="input-radio-cm5" class="" type="radio" name="version" value="CellModeller5">
+                                            <div>CellModeller5</div>
+                                        </label>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+    
+                        <div class="row-push" style="padding: 1rem 0;">
+                            <label for="name">Checkout from Repository</label> 
+                            <input type="checkbox" id="input-custom-checkout">
+                        </div>
+    
+                        <div class="row-fill">
+                            <div class="row-element">
+                                <label for="name">Git Repository</label> 
+                                <input type="text" placeholder="Repository" id="input-backend-git-repo" name="gitrepo" value="https://github.com/HaseloffLab/CellModeller.git">
+                            </div>
+                            <div class="row-element row-padding"></div>
+                            <div class="row-element">
+                                <label for="name">Git Branch</label> 
+                                <input type="text" placeholder="Branch" id="input-backend-git-branch" name="gitbranch" value="master">
+                            </div>
+                        </div>
+                    </div>
+    
+                    <div class="row-push">
+                        <div class="row">
+                            <label for="input-upload-file">
+                                <input type="file" name="upload-file" id="input-upload-file" style="display: none;" accept=".txt,.py">
+                                <div id="upload-button-text" class="plain-button">Upload Source</div>
+                            </label>
+                            <div id="upload-file-name"></div>
+                        </div>
+                        <button id="create-button" class="submit-button">Create Simulation</button>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-frame inactive-frame">
+            
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
