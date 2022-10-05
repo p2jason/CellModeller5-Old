@@ -8,6 +8,7 @@ from .manager import kill_simulation
 from .siminstance import ISimulationInstance, InstanceAction, InstanceMessage
 
 from simrunner.backends.cellmodeller4 import CellModeller4Backend
+from simrunner.backends.cellmodeller5 import CellModeller5Backend
 from saveviewer import archiver as sv_archiver
 
 class SimulationProcess(ISimulationInstance):
@@ -120,7 +121,11 @@ def instance_control_thread(pipe, params):
 	# This is more of a "sanity try-catch". It is here to make sure that
 	# if any exceptions occur, we still properly clean up the simulation instance
 	try:
-		backend = CellModeller4Backend(params)
+		if params.backend_version == "CellModeller5":
+			backend = CellModeller5Backend(params)
+		else:
+			backend = CellModeller4Backend(params)
+
 		backend.initialize()
 
 		while running and backend.is_running():
