@@ -12,7 +12,7 @@ def signin_view(request):
         return HttpResponseBadRequest("No username provided")
 
     if not password:
-        return HttpResponseBadRequest("No username provided")
+        return HttpResponseBadRequest("No password provided")
 
     user = authenticate(request, username=username, password=password)
 

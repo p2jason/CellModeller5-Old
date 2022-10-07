@@ -37,7 +37,7 @@ async function submitCreateRequest() {
     const customGitUrl = document.getElementById("input-backend-git-repo");
     const customBranch = document.getElementById("input-backend-git-branch");
 
-    if (!isVersionCM4.checked && !isVersionCM4.checked) {
+    if (!isVersionCM4.checked && !isVersionCM5.checked) {
         alert("Hmmm... neither CM4 nor CM5 is selected. This shouldn't happen!");
         return;
     }
@@ -54,7 +54,7 @@ async function submitCreateRequest() {
     if (invalid) return;
 
     const name = simName.value;
-    const version = isVersionCM5 ? "CellModeller5" : "CellModeller4";
+    const version = isVersionCM5.checked ? "CellModeller5" : "CellModeller4";
     const source = await sourceUpload.files[0].slice().text();
 
     let backend = version;

@@ -5,24 +5,6 @@ import io
 
 from . import archiver as sv_archiver
 
-def get_all_simulations(request):
-	archiver = sv_archiver.get_save_archiver()
-
-	all_sims = { "simulations": [] }
-
-	for (uuid, data) in archiver.get_all_sim_data():
-		all_sims["simulations"].append({
-			"uuid": uuid,
-			"name": data["name"],
-			"frame_count": data["num_frames"]
-		})
-
-	response_content = json.dumps(data)
-	response = HttpResponse(response_content, content_type="application/json")
-	response["Content-Length"] = len(response_content)
-
-	return response
-
 def frame_data(request):
 	if not "index" in request.GET:
 		return HttpResponseBadRequest("No frame index provided")
