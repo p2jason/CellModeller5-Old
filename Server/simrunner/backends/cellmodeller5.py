@@ -5,10 +5,6 @@ import importlib
 import sys
 import time
 
-sys.path.append("C:\\Users\\Jason\\Downloads\\CellModeller5\\CellModeller\\build\\lib.win-amd64-3.8")
-
-import cellmodeller5 as cm5
-
 class CellModeller5Backend(SimulationBackend):
 	def __init__(self, params):
 		super().__init__(params)
@@ -17,7 +13,10 @@ class CellModeller5Backend(SimulationBackend):
 		self.simulator = None
 	
 	def initialize(self):
-		self.simulator = cm5.Simulator()
+		# Look at cellmodeller4.py for an explanation of why this is needed
+		module = importlib.import_module("cellmodeller5")
+
+		self.simulator = module.Simulator()
 	
 	def step(self):
 		self.simulator.step()

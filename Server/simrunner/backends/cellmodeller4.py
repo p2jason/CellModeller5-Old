@@ -1,7 +1,5 @@
 from .backend import SimulationBackend
 
-import CellModeller as CellModeller4
-
 import struct
 import io
 import os
@@ -20,8 +18,10 @@ class CellModeller4Backend(SimulationBackend):
 		simulator_class = None
 
 		if type(self.params.backend_version) is str:
+			# We cannot import CellModeller the traditional way because we want the users to be able to run
+			# the server even if they don't have all the versions of CellModeller installed.
 			module = importlib.import_module("CellModeller.Simulator")
-			simulator_class = module.Simualtor
+			simulator_class = module.Simulator
 		else:
 			# NOTE(Jason): If we were to import the source directory (i.e. 'CellModeller/'), importlib won't import
 			# anything. I'm guessing this is because '__init__.py' is empty. To solve this, we can import 'Simulator.py'
@@ -81,7 +81,7 @@ class CellModeller4Backend(SimulationBackend):
 			byte_buffer.write(struct.pack("ffI", final_length, state.radius, packed_color))
 
 		with open(viz_bin_path, "wb") as out_file:
-			out_file.write(byte_buffer.getbuffer())
+			out_file.write(self.compress_step(byte_buffer.getbuffer()))
 
 		return pickle_file_relative, cached_file_relative
 

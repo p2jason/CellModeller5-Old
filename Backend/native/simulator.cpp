@@ -3,6 +3,8 @@
 #include "shader_compiler.h"
 #include "frame_capture.h"
 
+#include "zlib.h"
+
 #include <fstream>
 #include <iostream>
 
@@ -89,6 +91,7 @@ Result<void> initSimulator(Simulator* simulator, bool withDebug)
 #endif
 
 	simulator->uploadStateOnNextStep = true;
+	simulator->compressionLevel = 2;
 
 	//Initialize frame capture
 	initFrameCapture();
@@ -387,49 +390,94 @@ vec3 directionFromAngles(vec2 rotation)
 	return { sin(rotation.y), cos(rotation.x), cos(rotation.y) };
 }
 
-Result<void> writeSimulatorStateToVizFile(Simulator& simulator, std::string filepath)
+Result<void> compressToFile(uint8_t* inputBuffer, uint32_t inputSize, int level, std::string filepath)
 {
 	std::ofstream out(filepath, std::ios::binary | std::ios::trunc);
 
 	if (!out)
 	{
-		CM_ERROR_MESSAGE("Failed to write to viz file: " + filepath);
+		CM_ERROR_MESSAGE("Failed to open viz file: " + filepath);
 	}
 
-	uint8_t buffer[8 * sizeof(float) + sizeof(uint32_t)];
+	uint8_t outBuffer[4096];
 
-	out.write((const char*)&simulator.cellCount, sizeof(uint32_t));
+	z_stream stream;
+	stream.zalloc = Z_NULL;
+	stream.zfree = Z_NULL;
+	stream.opaque = Z_NULL;
+
+	int ret = deflateInit(&stream, level);
+	if (ret != Z_OK) CM_ERROR_MESSAGE("Failed to initialize deflate algorithm");
+
+	stream.avail_in = inputSize;
+	stream.next_in = inputBuffer;
+
+	do
+	{
+		stream.avail_out = sizeof(outBuffer);
+		stream.next_out = outBuffer;
+
+		ret = deflate(&stream, Z_FINISH);
+		if (ret == Z_STREAM_ERROR) CM_ERROR_MESSAGE("Error occured when compressing buffer");
+
+		int available = sizeof(outBuffer) - stream.avail_out;
+
+		try
+		{
+			out.write((const char*)outBuffer, available);
+		}
+		catch (...)
+		{
+			deflateEnd(&stream);
+			CM_ERROR_MESSAGE("Error occured when writing to file: " + filepath);
+		}
+	} while (stream.avail_out == 0);
+
+	deflateEnd(&stream);
+
+	out.close();
+
+	return Result<void>();
+}
+
+Result<void> writeSimulatorStateToVizFile(Simulator& simulator, std::string filepath)
+{
+	size_t elemWidth = 8 * sizeof(float) + sizeof(uint32_t);
+
+	std::vector<uint8_t> buffer(sizeof(uint32_t) + simulator.cellCount * elemWidth);
+
+	//Write
+	union
+	{
+		uint8_t* asByte;
+
+		float* asFloat;
+		uint32_t* asUInt;
+	} alias;
+
+	alias.asByte = buffer.data();
+	*(alias.asUInt++) = simulator.cellCount;
 	
 	for (uint32_t i = 0; i < simulator.cellCount; ++i)
 	{
-		union
-		{
-			float* bufferAsFloat;
-			uint32_t* bufferAsUInt;
-		};
-
-		bufferAsFloat = (float*)buffer;
-
 		vec3 pos = simulator.cpuState.positions[i];
 		vec3 dir = directionFromAngles(simulator.cpuState.rotations[i]);
 		vec2 size = simulator.cpuState.sizes[i];
 
-		*(bufferAsFloat++) = pos.x;
-		*(bufferAsFloat++) = pos.y;
-		*(bufferAsFloat++) = pos.z;
+		*(alias.asFloat++) = pos.x;
+		*(alias.asFloat++) = pos.y;
+		*(alias.asFloat++) = pos.z;
 
-		*(bufferAsFloat++) = dir.x;
-		*(bufferAsFloat++) = dir.y;
-		*(bufferAsFloat++) = dir.z;
+		*(alias.asFloat++) = dir.x;
+		*(alias.asFloat++) = dir.y;
+		*(alias.asFloat++) = dir.z;
 
-		*(bufferAsFloat++) = size.x;
-		*(bufferAsFloat++) = size.y;
-		*(bufferAsUInt++) = 0xFF0000FF;//simulator.cpuState.colors[i];
-
-		out.write((const char*)buffer, sizeof(buffer));
+		*(alias.asFloat++) = size.x;
+		*(alias.asFloat++) = size.y;
+		*(alias.asUInt++) = 0xFF0000FF;//simulator.cpuState.colors[i];
 	}
 
-	out.close();
+	compressToFile(buffer.data(), (uint32_t)buffer.size(), simulator.compressionLevel, filepath);
 
 	return Result<void>();
 }

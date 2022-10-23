@@ -1,3 +1,5 @@
+import zlib
+
 class BackendParameters:
 	def __init__(self):
 		self.uuid = None
@@ -14,6 +16,8 @@ class BackendParameters:
 		self.backend_version = None
 
 class SimulationBackend:
+	STEP_COMPRESSION_LEVEL_ZLIB = 2
+
 	def __init__(self, params):
 		assert isinstance(params, BackendParameters)
 
@@ -27,6 +31,9 @@ class SimulationBackend:
 
 	def write_step_pickle(self):
 		return ""
+
+	def compress_step(self, data):
+		return zlib.compress(data, self.STEP_COMPRESSION_LEVEL_ZLIB)
 
 	def is_running(self):
 		return True

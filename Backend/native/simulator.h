@@ -64,6 +64,8 @@ struct Simulator
 	/********* Miscellaneous *********/
 	std::function<void()> queueWaitBegin = nullptr;
 	std::function<void()> queueWaitEnd = nullptr;
+
+	int compressionLevel = 2;
 };
 
 typedef std::function<std::string(const std::string&)> ShaderImportCallback;

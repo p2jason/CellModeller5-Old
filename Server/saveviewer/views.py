@@ -1,7 +1,4 @@
-from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFound
-
-import json
-import io
+from django.http import FileResponse, HttpResponseBadRequest, HttpResponseNotFound
 
 from . import archiver as sv_archiver
 
@@ -18,14 +15,7 @@ def frame_data(request):
 
 	selected_frame = sv_archiver.get_save_archiver().get_sim_bin_file(sim_id, index)
 
-	# Read frame data
-	frame_file = open(selected_frame, "rb")
-	byte_buffer = io.BytesIO(frame_file.read())
-
-	frame_file.close()
-
-	response_content = byte_buffer.getvalue()	
-	response = HttpResponse(response_content, content_type="application/octet-stream")
-	response["Content-Length"] = len(response_content)
+	response = FileResponse(open(selected_frame, "rb"))
+	response["Content-Encoding"] = "deflate"
 
 	return response

@@ -10,3 +10,6 @@
 [submodule "CellModeller/third_party/Vulkan-Headers"]
 	path = Backend/third_party/Vulkan-Headers
 	url = https://github.com/KhronosGroup/Vulkan-Headers.git
+[submodule "Backend/third_party/zlib"]
+	path = Backend/third_party/zlib
+	url = https://github.com/madler/zlib.git

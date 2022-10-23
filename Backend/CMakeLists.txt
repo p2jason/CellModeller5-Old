@@ -42,6 +42,49 @@ set(PYBIND11_TEST OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(third_party/pybind11)
 
+############ Setup zlib ############
+set(ZLIB_ROOT "${PROJECT_SOURCE_DIR}/third_party/zlib/")
+
+set(ZLIB_SOURCES
+    ${ZLIB_ROOT}/zconf.h
+    ${ZLIB_ROOT}/zlib.h
+    ${ZLIB_ROOT}/crc32.h
+    ${ZLIB_ROOT}/deflate.h
+    ${ZLIB_ROOT}/gzguts.h
+    ${ZLIB_ROOT}/inffast.h
+    ${ZLIB_ROOT}/inffixed.h
+    ${ZLIB_ROOT}/inflate.h
+    ${ZLIB_ROOT}/inftrees.h
+    ${ZLIB_ROOT}/trees.h
+    ${ZLIB_ROOT}/zutil.h
+    
+    ${ZLIB_ROOT}/adler32.c
+    ${ZLIB_ROOT}/compress.c
+    ${ZLIB_ROOT}/crc32.c
+    ${ZLIB_ROOT}/deflate.c
+    ${ZLIB_ROOT}/gzclose.c
+    ${ZLIB_ROOT}/gzlib.c
+    ${ZLIB_ROOT}/gzread.c
+    ${ZLIB_ROOT}/gzwrite.c
+    ${ZLIB_ROOT}/inflate.c
+    ${ZLIB_ROOT}/infback.c
+    ${ZLIB_ROOT}/inftrees.c
+    ${ZLIB_ROOT}/inffast.c
+    ${ZLIB_ROOT}/trees.c
+    ${ZLIB_ROOT}/uncompr.c
+    ${ZLIB_ROOT}/zutil.c
+)
+
+add_library(zlib STATIC ${ZLIB_SOURCES})
+
+if(MSVC)
+	set_target_properties(zlib PROPERTIES DEBUG_POSTFIX "d")
+    target_compile_definitions(zlib PUBLIC -D_CRT_SECURE_NO_DEPRECATE)
+    target_compile_definitions(zlib PUBLIC -D_CRT_NONSTDC_NO_DEPRECATE)
+endif()
+
+target_include_directories(zlib PUBLIC ${ZLIB_ROOT})
+
 ############ Setup sources ############
 if (WIN32)
    set(GLOBAL_DEFINES VK_USE_PLATFORM_WIN32_KHR)
@@ -74,6 +117,7 @@ target_link_libraries(${MODULE_NAME} PRIVATE Vulkan-Headers)
 target_link_libraries(${MODULE_NAME} PRIVATE volk)
 target_link_libraries(${MODULE_NAME} PRIVATE glslang)
 target_link_libraries(${MODULE_NAME} PRIVATE SPIRV)
+target_link_libraries(${MODULE_NAME} PRIVATE zlib)
 
 target_include_directories(${MODULE_NAME} PUBLIC src)
 
