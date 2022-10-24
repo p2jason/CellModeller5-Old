@@ -11,6 +11,7 @@ in vec3 v_CellEnd0;
 in vec3 v_CellEnd1;
 
 in vec3 v_Color;
+flat in int v_IsSelected;
 
 out vec4 outColor;
 
@@ -59,8 +60,13 @@ float lineSegmentDistance(vec3 a0, vec3 a1, vec3 b0, vec3 b1) {
 void main() {
 	float dist = lineSegmentDistance(u_CameraPos, v_WorldPos, v_CellEnd0, v_CellEnd1);
 
-	float outlineThickness = 0.08;
-	vec3 color = mix(v_Color, vec3(1.0), smoothstep(v_Radius - outlineThickness - 0.03, v_Radius - outlineThickness, dist));
+	bool selected = v_IsSelected != 0;
+	float outlineThickness = selected ? 0.13 : 0.08;
+
+	vec3 outlineColor = selected ? vec3(0.0) : vec3(1.0);
+	vec3 fillColor = selected ? vec3(1.0, 1.0, 0.0) : v_Color;
+
+	vec3 color = mix(fillColor, outlineColor, smoothstep(v_Radius - outlineThickness - 0.03, v_Radius - outlineThickness, dist));
 
 	if (dist > v_Radius) {
 		discard;

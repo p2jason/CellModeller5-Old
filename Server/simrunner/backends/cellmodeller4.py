@@ -64,7 +64,7 @@ class CellModeller4Backend(SimulationBackend):
 		byte_buffer = io.BytesIO()
 		byte_buffer.write(struct.pack("i", len(cell_states)))
 
-		for it in cell_states:
+		for it in cell_states.keys():
 			state = cell_states[it]
 
 			color_r = int(255.0 * min(state.color[0], 1.0))
@@ -76,9 +76,14 @@ class CellModeller4Backend(SimulationBackend):
 			# expects that the length will be calculated based on how its done in CM5.
 			final_length = state.length + 1.0 - 2.0 * state.radius
 
-			byte_buffer.write(struct.pack("fff", state.pos[0], state.pos[2], state.pos[1]))
-			byte_buffer.write(struct.pack("fff", state.dir[0], state.dir[2], state.dir[1]))
-			byte_buffer.write(struct.pack("ffI", final_length, state.radius, packed_color))
+			byte_buffer.write(struct.pack("<fff", state.pos[0], state.pos[2], state.pos[1]))
+			byte_buffer.write(struct.pack("<fff", state.dir[0], state.dir[2], state.dir[1]))
+			byte_buffer.write(struct.pack("<ffI", final_length, state.radius, packed_color))
+
+		for it in cell_states.keys():
+			state = cell_states[it]
+
+			byte_buffer.write(struct.pack("<Q", int(state.id)))
 
 		with open(viz_bin_path, "wb") as out_file:
 			out_file.write(self.compress_step(byte_buffer.getbuffer()))

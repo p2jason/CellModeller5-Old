@@ -444,15 +444,15 @@ Result<void> writeSimulatorStateToVizFile(Simulator& simulator, std::string file
 {
 	size_t elemWidth = 8 * sizeof(float) + sizeof(uint32_t);
 
-	std::vector<uint8_t> buffer(sizeof(uint32_t) + simulator.cellCount * elemWidth);
+	std::vector<uint8_t> buffer(sizeof(uint32_t) + simulator.cellCount * elemWidth + simulator.cellCount * sizeof(uint64_t));
 
-	//Write
 	union
 	{
 		uint8_t* asByte;
 
 		float* asFloat;
 		uint32_t* asUInt;
+		uint64_t* asULong;
 	} alias;
 
 	alias.asByte = buffer.data();
@@ -464,6 +464,7 @@ Result<void> writeSimulatorStateToVizFile(Simulator& simulator, std::string file
 		vec3 dir = directionFromAngles(simulator.cpuState.rotations[i]);
 		vec2 size = simulator.cpuState.sizes[i];
 
+		//TODO: Correct byte order
 		*(alias.asFloat++) = pos.x;
 		*(alias.asFloat++) = pos.y;
 		*(alias.asFloat++) = pos.z;
@@ -475,6 +476,13 @@ Result<void> writeSimulatorStateToVizFile(Simulator& simulator, std::string file
 		*(alias.asFloat++) = size.x;
 		*(alias.asFloat++) = size.y;
 		*(alias.asUInt++) = 0xFF0000FF;//simulator.cpuState.colors[i];
+	}
+
+	for (uint32_t i = 0; i < simulator.cellCount; ++i)
+	{
+		//TODO: Use correct cell id
+		//TODO: Correct byte order
+		*(alias.asULong++) = i;
 	}
 
 	compressToFile(buffer.data(), (uint32_t)buffer.size(), simulator.compressionLevel, filepath);

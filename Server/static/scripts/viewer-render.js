@@ -284,13 +284,27 @@ function generateGrid(gl, context) {
 
 export function pushFrameData(gl, context, dataBuffer) {
 	const dataView = new DataView(dataBuffer);
+	const cellCount = dataView.getInt32(0, true);
 
 	context["cellData"] = dataBuffer;
-	context["cellCount"] = dataView.getInt32(0, true);
+	context["cellCount"] = cellCount;
 	
 	gl.bindBuffer(gl.ARRAY_BUFFER, context["bacteriumMesh"]["instanceBuffer"]);
 	gl.bufferData(gl.ARRAY_BUFFER, dataView, gl.DYNAMIC_DRAW, 4, dataBuffer.byteLength - 4);
 	gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+	return [ cellCount ];
+}
+
+export function calcCellVertexOffset(context, index) {
+	return 4 + 36 * index;
+}
+
+export function lookupCellIdentifier(context, index) {
+	const baseOffset = 4 + 36 * context["cellCount"] + 8 * index;
+	const dataView = new DataView(context["cellData"]);
+
+	return dataView.getBigUint64(baseOffset, true);
 }
 
 export async function init(gl, context) {
@@ -302,7 +316,7 @@ export async function init(gl, context) {
 	const cellFragmentSource = await cellFragmentData.text();
 
 	context["cellShader"] = createShader(gl, cellVertexSource, cellFragmentSource, [
-		"u_MvpMatrix", "u_CameraPos"
+		"u_MvpMatrix", "u_CameraPos", "u_SelectedIndex"
 	]);
 
 	//Load grid shader
@@ -371,6 +385,8 @@ function renderScene(gl, context, delta) {
 	gl.useProgram(cellShader["program"]);
 	gl.uniformMatrix4fv(cellShader["uniforms"]["u_MvpMatrix"], false, mvpMatrix);
 	gl.uniform3f(cellShader["uniforms"]["u_CameraPos"], cameraPos[0], cameraPos[1], cameraPos[2]);
+	
+	gl.uniform1i(cellShader["uniforms"]["u_SelectedIndex"], context["selectedCellIndex"]);
 
 	gl.bindVertexArray(mesh.vao);
 	gl.drawElementsInstanced(gl.TRIANGLES, mesh.indexCount, mesh.indexType, 0, context["cellCount"]);

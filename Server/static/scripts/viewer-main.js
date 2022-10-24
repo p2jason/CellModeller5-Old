@@ -9,7 +9,7 @@ function setSimFrame(index, frameCount) {
 }
 
 function setStatusMessage(message) {
-	document.getElementById("status-label").innerHTML = message;
+	document.getElementById("status-label").innerHTML = `Status: ${message}`;
 }
 
 function setButtonContainerDisplay(display) {
@@ -41,28 +41,42 @@ function appendInitLogMessage(message) {
 	textArea.scrollTop = textArea.scrollHeight;
 }
 
-function requestFrame(context, uuid, index) {
+async function requestFrame(context, uuid, index) {
 	context["currentIndex"] = index;
 	
-	return fetch(`/api/saveviewer/framedata?index=${index}&uuid=${uuid}`)
-		.then(response => {
-			if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
-			return response.arrayBuffer();
-		})
-		.then(buffer => {
-			if (context["currentIndex"] != index) {
-				//TODO:
-				//console.log("Skipping frame");
-				//return;
+	const frameData = await fetch(`/api/saveviewer/framedata?index=${index}&uuid=${uuid}`);
+	const frameBuffer = await frameData.arrayBuffer();
+
+	if (context["currentIndex"] != index) {
+		//TODO:
+		//console.log("Skipping frame");
+		//return;
+	}
+
+	context["simInfo"].frameIndex = index;
+
+	setSimFrame(index + 1, context["simInfo"].frameCount);
+
+	//Update UI
+	const [ cellCount ] = render.pushFrameData(context["gl"], context, frameBuffer)
+
+	//Update the cell index based on the identifier
+	if (context["selectedCellIndex"] >= 0) {
+		context["selectedCellIndex"] = -1;
+
+		const identifier = context["selectedCellIdentifier"];
+
+		for (let i = 0; i < cellCount; i++) {
+			if (render.lookupCellIdentifier(context, i) === identifier) {
+				context["selectedCellIndex"] = i;
+				break;
 			}
+		}
+	}
 
-			context["simInfo"].frameIndex = index;
+	document.getElementById("simdets-cellcount").innerText = cellCount;
 
-			setSimFrame(index + 1, context["simInfo"].frameCount);
-
-			render.pushFrameData(context["gl"], context, buffer)
-		})
-		.catch(error => console.log("Error when reuesting simulation info:", error));
+	await updateCellInfo(context);
 }
 
 function connectToSimulation(context, uuid) {
@@ -85,7 +99,7 @@ function connectToServer(context) {
 			reject(err);
 		};
 		
-		commsSocket.onmessage = function(e) {
+		commsSocket.onmessage = async function(e) {
 			const message = JSON.parse(e.data);
 
 			const action = message["action"];
@@ -107,7 +121,7 @@ function connectToServer(context) {
 				setSimName(data.name);
 				
 				if (data.frameCount > 0) {
-					requestFrame(context, context["simUUID"], 0);
+					await requestFrame(context, context["simUUID"], 0);
 				}
 
 				if (data.isOnline) {
@@ -176,7 +190,163 @@ function processTimelineChange(value, context) {
 	requestFrame(context, context["simUUID"], value - 1);
 }
 
-function initFrame(gl, context) {
+async function updateCellInfo(context) {
+	const cellIndex = context["selectedCellIndex"];
+
+	const cellDetailsHeader = document.getElementById("cell-details-header");
+	const cellDetailsSection = document.getElementById("cell-details-section");
+
+	if (cellIndex === -1) {
+		cellDetailsHeader.style.display = "none";
+		cellDetailsSection.style.display = "none";
+	} else {
+		const simUUID = context["simUUID"];
+		const frameIndex = context["currentIndex"];
+		const cellId = context["selectedCellIdentifier"];
+
+		const cellData = await fetch(`/api/saveviewer/cellinfoindex?cellid=${cellId}&frameindex=${frameIndex}&uuid=${simUUID}`);
+		const cellProps = await cellData.json();
+
+		let cellText = "";
+
+		for (const key in cellProps) {
+			const value = cellProps[key];
+
+			let text = value;
+			if (typeof value == 'number') {
+				const magnitude = Math.pow(10, 5);
+
+				text = Math.floor(value * magnitude) / magnitude;;
+			}
+
+			cellText += `<tr><td>${key}</td><td>${text}</td></tr>`;
+		}
+
+		cellDetailsHeader.style.display = "table-row-group";
+		cellDetailsSection.style.display = "table-row-group";
+
+//		cellDetailsSection.innerHTML = cellText;
+	}
+}
+
+function doMousePick(context) {
+	// https://iquilezles.org/articles/intersectors/
+	function capIntersect(ro, rd, pa, pb, ra) {
+		const ba = vec3.sub(vec3.create(), pb, pa);
+		const oa = vec3.sub(vec3.create(), ro, pa);
+		const baba = vec3.dot(ba, ba);
+		const bard = vec3.dot(ba, rd);
+		const baoa = vec3.dot(ba, oa);
+		const rdoa = vec3.dot(rd, oa);
+		const oaoa = vec3.dot(oa, oa);
+		let a = baba - bard * bard;
+		let b = baba * rdoa - baoa * bard;
+		let c = baba * oaoa - baoa * baoa - ra * ra * baba;
+		let h = b * b - a * c;
+
+		if (h >= 0.0) {
+			const t = (-b - Math.sqrt(h)) / a;
+			const y = baoa + t * bard;
+
+			// body
+			if (y > 0.0 && y < baba) return t;
+
+			// caps
+			const oc = (y <= 0.0) ? oa : vec3.sub(vec3.create(), ro, pb);
+			b = vec3.dot(rd, oc);
+			c = vec3.dot(oc, oc) - ra * ra;
+			h = b * b - c;
+
+			if (h > 0.0) return -b - Math.sqrt(h);
+		}
+
+		return -1.0;
+	}
+
+	//const t0 = performance.now();
+
+	const camera = context["camera"];
+	const viewportWidth = camera["width"];
+	const viewportHeight = camera["height"];
+
+	const mouseX = context["input"]["lastMouseX"];
+	const mouseY = context["input"]["lastMouseY"];
+
+	const ndcX = 2.0 * (mouseX / viewportWidth) - 1.0;
+	const ndcY = 1.0 - 2.0 * (mouseY / viewportHeight);
+	const clipCoords = vec4.fromValues(ndcX, ndcY, -1.0, 1.0);
+
+	const projectionMatrix = camera["projectionMatrix"];
+	const invProjectionMatrix = mat4.invert(mat4.create(), projectionMatrix)
+	const eyeCoords = vec4.transformMat4(vec4.create(), clipCoords, invProjectionMatrix);
+	const viewCoords = vec4.fromValues(eyeCoords[0], eyeCoords[1], -1.0, 0.0);
+
+	const viewMatrix = camera["viewMatrix"];
+	const invViewMatrix = mat4.invert(mat4.create(), viewMatrix);
+	const worldDir = vec4.transformMat4(vec4.create(), viewCoords, invViewMatrix);
+	const rayDir = vec4.normalize(vec4.create(), worldDir);
+
+	const cameraPos = camera["position"];
+
+	const dataBuffer = context["cellData"];
+	const cellCount = context["cellCount"];
+	const dataView = new DataView(dataBuffer);
+
+	let minIndex = -1;
+	let minDist = Number.MAX_VALUE;
+
+	for (let i = 0; i < cellCount; i++) {
+		const baseOffset = render.calcCellVertexOffset(context, i);
+
+		const cellPos = vec3.fromValues(
+			dataView.getFloat32(baseOffset + 0, true),
+			dataView.getFloat32(baseOffset + 4, true),
+			dataView.getFloat32(baseOffset + 8, true),
+		);
+
+		const cellDir = vec3.fromValues(
+			dataView.getFloat32(baseOffset + 12, true),
+			dataView.getFloat32(baseOffset + 16, true),
+			dataView.getFloat32(baseOffset + 20, true),
+		);
+
+		const length = dataView.getFloat32(baseOffset + 24, true);
+		const radius = dataView.getFloat32(baseOffset + 28, true);
+
+		const yaw = Math.atan2(cellDir[0], cellDir[2]);
+		const pitch = Math.acos(cellDir[1]);
+
+		const rotVector = vec3.fromValues(
+			radius * Math.sin(yaw) * Math.sin(pitch),
+			0.5 * Math.cos(pitch),
+			radius * Math.cos(yaw) * Math.sin(pitch)
+		);
+		
+		const cellEnd0 = vec3.scaleAndAdd(vec3.create(), cellPos, rotVector, length);
+		const cellEnd1 = vec3.scaleAndAdd(vec3.create(), cellPos, rotVector, -length);
+
+		const intersectDist = capIntersect(cameraPos, rayDir, cellEnd0, cellEnd1, radius);
+
+		if (intersectDist >= 0 && intersectDist < minDist) {
+			minDist = intersectDist;
+			minIndex = i;
+		}
+	}
+
+	//const t1 = performance.now();
+	//console.log(`Performance: ${t1 - t0}ms (${minIndex}, ${minDist})`);
+
+	context["selectedCellIndex"] = minIndex;
+	context["selectedCellIdentifier"] = minIndex !== -1 ? render.lookupCellIdentifier(context, minIndex) : undefined;
+
+	updateCellInfo(context);
+}
+
+async function initFrame(gl, context) {
+	setStatusMessage("Initializing");
+
+	context["selectedCellIndex"] = -1;
+
 	//Initialize camera details
 	context["camera"] = {
 		"orbitCenter": vec3.fromValues(0, 0.0, 0.0),
@@ -196,6 +366,9 @@ function initFrame(gl, context) {
 
 		"projectionMatrix": mat4.create(),
 		"viewMatrix": mat4.create(),
+
+		"width": 0,
+		"height": 0,
 	};
 
 	//Initialize input details
@@ -239,23 +412,20 @@ function initFrame(gl, context) {
 	document.getElementById("stop-btn").onclick = function(event) { stopSimulation(context); };
 
 	//Initialize the renderer
-	setStatusMessage("Initializing");
-
 	const uuid = document.getElementById("uuid-field").value;
 
-	render.init(gl, context)
-		.then(() => connectToSimulation(context, uuid))
-		.catch((error) => { console.log(`Error: ${error}`); });
+	await render.init(gl, context);
+	await connectToSimulation(context, uuid);
 }
 
 function drawScene(gl, context, delta) {
-	var camera = context["camera"];
-	var cameraPosition = camera["position"];
-	var cameraRotation = camera["rotation"];
+	let camera = context["camera"];
+	let cameraPosition = camera["position"];
+	let cameraRotation = camera["rotation"];
 
 	quat.fromEuler(cameraRotation, camera["pitch"], camera["yaw"], 0);
 
-	var forward = vec3.fromValues(0, 0, 1);
+	let forward = vec3.fromValues(0, 0, 1);
 	vec3.transformQuat(forward, forward, cameraRotation);
 	vec3.scaleAndAdd(cameraPosition, camera["orbitCenter"], forward, camera["orbitRadius"]);
 
@@ -277,6 +447,9 @@ function drawScene(gl, context, delta) {
 function resizeCanvas(gl, context, canvas) {
 	canvas.width = canvas.clientWidth;
 	canvas.height = canvas.clientHeight;
+
+	context["camera"]["width"] = canvas.clientWidth;
+	context["camera"]["height"] = canvas.clientHeight;
 
 	render.resize(gl, context, canvas);
 }
@@ -342,6 +515,8 @@ function processMouseButton(event, context, isdown) {
 
 	switch (event.button) {
 	case 0:
+		if (isdown) doMousePick(context);
+
 		context["input"]["leftButtonPressed"] = isdown;
 		break;
 	case 1:
@@ -367,7 +542,7 @@ function processMouseWheel(event, context) {
 	camera["orbitRadius"] = radius;
 }
 
-function main() {
+async function main() {
 	//Create canvas
 	var canvas = document.getElementById("renderTargetCanvas");
 	const gl = canvas.getContext("webgl2", {antialias: false});
@@ -380,7 +555,7 @@ function main() {
 	canvas.focus();
 	
 	var context = { "canvasElement": canvas, "gl": gl };
-	initFrame(gl, context);
+	await initFrame(gl, context);
 	resizeCanvas(gl, context, canvas);
 
 	canvas.addEventListener("mousemove", e => processMouseMove(e, context));

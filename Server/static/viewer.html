@@ -5,6 +5,7 @@
 	<script src="/static/scripts/viewer-main.js" type="module"></script>
 	<script src="/static/scripts/viewer-render.js" type="module"></script>
 	<link rel="stylesheet" href="/static/viewer-stylesheet.css"/>
+	<title>CellModeller Simulation</title>
 </head>
 <body>
 	<input type="hidden" id="uuid-field" value="{{ simulation_uuid }}">
@@ -20,8 +21,11 @@
 					</div>
 					<ul id="timeline-controls">
 						<li>
-							<div class="center-children"><p id="sim-name" class="item-background center-children">Name: No Simulation</p></div>
-							<div class="center-children"><p id="sim-frame" class="item-background">Frame: 0 / 0</p></div>
+							<div id="status-container" class="center-children item-background"><p id="status-label">Status: Offline</p></div>
+						</li>
+						<li class="item-background">
+							<div class="center-children"><p id="sim-name" class="center-children">Name: No Simulation</p></div>
+							<div class="center-children"><p id="sim-frame">Frame: 0 / 0</p></div>
 						</li>
 						<li>
 							<div class="item-background">
@@ -32,8 +36,36 @@
 					</ul>
 				</div>
 			</div>
-			<div id="status-container" class="item-background">
-				<p>Status:</p><p id="status-label">Offline</p>
+			<div id="viewer-details" class="item-background">
+				<table>
+					<tbody>
+						<tr><td colspan="2">
+							<div class="details-header"><span></span><span>Simulation details</span><span></span></div>
+						</td></tr>
+					</tbody>
+					<tbody class="details-keyvalue-table">
+						<tr><td>Time</td><td id="simdets-time">0</td></tr>
+						<tr><td>Cell count</td><td id="simdets-cellcount">0</td></tr>
+					</tbody>
+					<tbody id="cell-details-header">
+						<tr><td colspan="2">
+							<div class="details-header"><span></span><span>Cell Information</span><span></span></div>
+						</td></tr>
+					</tbody>
+					<tbody id="cell-details-section" class="details-keyvalue-table">
+						<tr><td>Index</td><td>N/A</td></tr>
+						<tr><td>Radius</td><td>N/A</td></tr>
+						<tr><td>Length</td><td>N/A</td></tr>
+						<tr><td>Growth rate</td><td>N/A</td></tr>
+						<tr><td>Effective growth</td><td>N/A</td></tr>
+						<tr><td>Cell type</td><td>N/A</td></tr>
+						<tr><td>Cell adhesion</td><td>N/A</td></tr>
+						<tr><td>Volume</td><td>N/A</td></tr>
+						<tr><td>Start volume</td><td>N/A</td></tr>
+						<tr><td>Target volume</td><td>N/A</td></tr>
+						<tr><td>Strain rate</td><td>N/A</td></tr>
+					</tbody>
+				</table>
 			</div>
 			<div id="button-container" class="item-background force-input">
 				{% if is_dev_sim %}

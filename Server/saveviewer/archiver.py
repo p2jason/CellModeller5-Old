@@ -62,7 +62,7 @@ class SaveArchiver:
 		if create_backend_dir:
 			os.mkdir(backend_path)
 
-		self.sim_data[uuid] = { "frames": {}, "name": name, "num_frames": 0 }
+		self.sim_data[uuid] = { "vizframes": {}, "stepframes": {}, "name": name, "num_frames": 0 }
 
 		if not extra_init_vars is None:
 			self.sim_data[uuid].update(extra_init_vars)
@@ -95,9 +95,15 @@ class SaveArchiver:
 	def get_sim_index_data(self, uuid: str):
 		return self.sim_data[uuid]
 
+	def get_sim_step_file(self, uuid: str, index: int):
+		simulation_root = self.master_data["saved_simulations"][uuid]
+		frame_relative_path = self.sim_data[uuid]["stepframes"][index]
+
+		return os.path.join(self.archive_root, simulation_root, frame_relative_path)
+
 	def get_sim_bin_file(self, uuid: str, index: int):
 		simulation_root = self.master_data["saved_simulations"][uuid]
-		frame_relative_path = self.sim_data[uuid]["frames"][index]
+		frame_relative_path = self.sim_data[uuid]["vizframes"][index]
 
 		return os.path.join(self.archive_root, simulation_root, frame_relative_path)
 
@@ -105,8 +111,9 @@ def add_entry_to_sim_index(index_path, step_file: str, viz_bin_file: str):
 	with open(index_path, "r+") as index_file:
 		sim_data = json.loads(index_file.read())
 
-		frame_count = len(sim_data["frames"])
-		sim_data["frames"][frame_count] = viz_bin_file
+		frame_count = len(sim_data["vizframes"])
+		sim_data["vizframes"][frame_count] = viz_bin_file
+		sim_data["stepframes"][frame_count] = step_file
 		sim_data["num_frames"] = frame_count + 1
 
 		sim_data_str = json.dumps(sim_data)

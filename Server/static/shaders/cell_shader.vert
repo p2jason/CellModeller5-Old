@@ -15,12 +15,15 @@ layout(location = 7) in vec4 a_Color;
 
 uniform mat4 u_MvpMatrix;
 
+uniform int u_SelectedIndex;
+
 out vec3 v_WorldPos;
 out float v_Radius;
 out vec3 v_CellEnd0;
 out vec3 v_CellEnd1;
 
 out vec3 v_Color;
+flat out int v_IsSelected;
 
 void main() {
 	//Calculate rotation matrix
@@ -32,20 +35,13 @@ void main() {
 	float cp = cos(pitch);
 	float sp = sin(pitch);
 
-	mat3 rotMatrix = mat3(
-		cy, 0.0, -sy,
-		sy * sp, cp, cy * sp, 
-		sy * cp, -sp, cy * cp
-	);
-
 	//Transform vertex position to world space
-	mat3 scaleMatrix = mat3(1.0);
-	scaleMatrix[0][0] = a_Radius;
-	scaleMatrix[1][1] = 0.5;
-	scaleMatrix[2][2] = a_Radius;
-
-	mat4 modelMatrix = mat4(rotMatrix * scaleMatrix);
-	modelMatrix[3] = vec4(a_CellPos, 1.0);
+	mat4 modelMatrix = mat4(
+		a_Radius * cy,      0.5 * 0.0,   a_Radius * -sy,     0.0,
+		a_Radius * sy * sp, 0.5 * cp,    a_Radius * cy * sp, 0.0,
+		a_Radius * sy * cp, 0.5 * -sp,   a_Radius * cy * cp, 0.0,
+		a_CellPos.x,        a_CellPos.y, a_CellPos.z,        1.0
+	);
 
 	float totalLength = a_Length + 2.0 * a_Radius;
 
@@ -57,10 +53,21 @@ void main() {
 	//Write varyings
 	gl_Position = u_MvpMatrix * worldPos;
 
+	/*
+	The following can also be compacted to:
+
+		vec3 t = vec3(a_Radius * sy * sp, 0.5 * cp, a_Radius * cy * sp);
+		v_CellEnd0 = a_Length * t + a_CellPos;
+		v_CellEnd1 = -a_Length * t + a_CellPos;
+
+	I'm not going to use the compact version here since we already have the model matrix,
+	but it will come in handy when performing ray-cell intersection tests
+	*/
 	v_CellEnd0 = vec3(modelMatrix * vec4(0.0,  a_Length, 0.0, 1.0));
 	v_CellEnd1 = vec3(modelMatrix * vec4(0.0, -a_Length, 0.0, 1.0));
 
 	v_WorldPos = worldPos.xyz;
 	v_Color = a_Color.xyz;
 	v_Radius = a_Radius;
+	v_IsSelected = int(gl_InstanceID == u_SelectedIndex);
 }
