@@ -12,6 +12,7 @@ in vec3 v_CellEnd1;
 
 in vec3 v_Color;
 flat in int v_IsSelected;
+flat in int v_ThinOutline;
 
 out vec4 outColor;
 
@@ -61,7 +62,7 @@ void main() {
 	float dist = lineSegmentDistance(u_CameraPos, v_WorldPos, v_CellEnd0, v_CellEnd1);
 
 	bool selected = v_IsSelected != 0;
-	float outlineThickness = selected ? 0.13 : 0.08;
+	float outlineThickness = selected ? 0.13 : (v_ThinOutline == 0 ? 0.08 : 0.0);
 
 	vec3 outlineColor = selected ? vec3(0.0) : vec3(1.0);
 	vec3 fillColor = selected ? vec3(1.0, 1.0, 0.0) : v_Color;

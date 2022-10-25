@@ -316,7 +316,7 @@ export async function init(gl, context) {
 	const cellFragmentSource = await cellFragmentData.text();
 
 	context["cellShader"] = createShader(gl, cellVertexSource, cellFragmentSource, [
-		"u_MvpMatrix", "u_CameraPos", "u_SelectedIndex"
+		"u_MvpMatrix", "u_CameraPos", "u_SelectedIndex", "u_ThinOutlines"
 	]);
 
 	//Load grid shader
@@ -382,11 +382,14 @@ function renderScene(gl, context, delta) {
 		return;
 	}
 
+	const withThinOutline = context["useThinOutlines"] ? 1 : 0;
+
 	gl.useProgram(cellShader["program"]);
 	gl.uniformMatrix4fv(cellShader["uniforms"]["u_MvpMatrix"], false, mvpMatrix);
 	gl.uniform3f(cellShader["uniforms"]["u_CameraPos"], cameraPos[0], cameraPos[1], cameraPos[2]);
 	
 	gl.uniform1i(cellShader["uniforms"]["u_SelectedIndex"], context["selectedCellIndex"]);
+	gl.uniform1i(cellShader["uniforms"]["u_ThinOutlines"], withThinOutline);
 
 	gl.bindVertexArray(mesh.vao);
 	gl.drawElementsInstanced(gl.TRIANGLES, mesh.indexCount, mesh.indexType, 0, context["cellCount"]);

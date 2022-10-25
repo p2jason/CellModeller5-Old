@@ -346,6 +346,7 @@ async function initFrame(gl, context) {
 	setStatusMessage("Initializing");
 
 	context["selectedCellIndex"] = -1;
+	context["useThinOutlines"] = false;
 
 	//Initialize camera details
 	context["camera"] = {
@@ -403,14 +404,17 @@ async function initFrame(gl, context) {
 
 	context["alwaysUseLatestStep"] = snapToLastCheckbox.checked;
 
+	//Setup reload buttons
 	const recompileBtn = document.getElementById("recompile-btn");
 	if (recompileBtn !== null) recompileBtn.onclick = function(event) { recompileDevSimulation(context); };
 
 	const reloadBtn = document.getElementById("reload-btn");
 	if (reloadBtn !== null) reloadBtn.onclick = function(event) { reloadDevSimulation(context); };
 
+	//Setup buttons
 	document.getElementById("stop-btn").onclick = function(event) { stopSimulation(context); };
-
+	document.getElementById("thin-cell-outlines").onchange = function(event) { context["useThinOutlines"] = this.checked; };
+	
 	//Initialize the renderer
 	const uuid = document.getElementById("uuid-field").value;
 
