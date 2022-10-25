@@ -1,5 +1,7 @@
 from .backend import SimulationBackend
 
+from saveviewer.format import *
+
 import struct
 import io
 import os
@@ -46,23 +48,25 @@ class CellModeller4Backend(SimulationBackend):
 	def step(self):
 		self.simulation.step()
 
-	def write_step_files(self):
-		base_file_name = "step-%05i" % self.simulation.stepNum
+	def _write_step_frame(self, path):
+		cell_states = self.simulation.cellStates
 
-		pickle_path = os.path.join(self.simulation.outputDirPath, f"{base_file_name}.pickle")
-		viz_bin_path = os.path.join(self.params.cache_dir, f"{base_file_name}.bin")
+		writer = PackedCellWriter()
+		writer.write_header(len(cell_states))
 
-		pickle_file_relative = os.path.join(".", f"{base_file_name}.pickle")
-		cached_file_relative = os.path.join(self.params.cache_relative_prefix, f"{base_file_name}.bin")
+		for it in cell_states.keys():
+			state = cell_states[it]
 
-		# Write pickle
-		self.simulation.writePickle()
+			writer.write_cell(PackedCell.from_cellmodeller4(state))
 
-		# Write binary finle
+		with open(path, "wb") as out_file:
+			writer.flush_to_file(out_file)
+
+	def _write_viz_frame(self, path):
 		cell_states = self.simulation.cellStates
 
 		byte_buffer = io.BytesIO()
-		byte_buffer.write(struct.pack("i", len(cell_states)))
+		byte_buffer.write(struct.pack("<i", len(cell_states)))
 
 		for it in cell_states.keys():
 			state = cell_states[it]
@@ -85,8 +89,23 @@ class CellModeller4Backend(SimulationBackend):
 
 			byte_buffer.write(struct.pack("<Q", int(state.id)))
 
-		with open(viz_bin_path, "wb") as out_file:
+		with open(path, "wb") as out_file:
 			out_file.write(self.compress_step(byte_buffer.getbuffer()))
+
+	def write_step_files(self):
+		base_file_name = "step-%05i" % self.simulation.stepNum
+
+		pickle_path = os.path.join(self.simulation.outputDirPath, f"{base_file_name}.cm5_step")
+		viz_bin_path = os.path.join(self.params.cache_dir, f"{base_file_name}.cm5_viz")
+
+		pickle_file_relative = os.path.join(".", f"{base_file_name}.cm5_step")
+		cached_file_relative = os.path.join(self.params.cache_relative_prefix, f"{base_file_name}.cm5_viz")
+
+		# Write pickle
+		self._write_step_frame(pickle_path)
+
+		# Write binary finle
+		self._write_viz_frame(viz_bin_path)
 
 		return pickle_file_relative, cached_file_relative
 

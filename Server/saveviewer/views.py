@@ -1,8 +1,9 @@
 from django.http import HttpResponse, FileResponse, HttpResponseBadRequest, HttpResponseNotFound
 
 from . import archiver as sv_archiver
+from .format import PackedCellReader
 
-import json, pickle
+import json
 
 def frame_data(request):
 	if not "index" in request.GET:
@@ -39,24 +40,24 @@ def cell_info_from_index(request):
 
 	selected_frame = sv_archiver.get_save_archiver().get_sim_step_file(sim_id, frameindex)
 
-	with open(selected_frame, "rb") as pickle_file:
-		frame_pickle = pickle.load(pickle_file)
+	with open(selected_frame, "rb") as frame_file:
+		frame_reader = PackedCellReader(frame_file)
 
-	cell_data = frame_pickle["cellStates"][int(cellid)]
+	cell_data = frame_reader.find_cell_with_id(int(cellid))
 
 	data = {
-		"Index": cell_data.idx,
-		"Radius": float(cell_data.radius),
-		"Length": float(cell_data.length),
-		"Growth rate": float(cell_data.growthRate),
-		"Cell age": int(cell_data.cellAge),
-		"Effective growth": float(cell_data.effGrowth),
-		"Cell type": int(cell_data.cellType),
-		"Cell adhesion": int(cell_data.cellAdh),
-		"Target volume": float(cell_data.targetVol),
-		"Volume": float(cell_data.volume),
-		"Strain rate": float(cell_data.strainRate),
-		"Start volume": float(cell_data.startVol),
+		"Inde": cell_data.id,
+		"Radius": cell_data.radius,
+		"Length": cell_data.length,
+		"Growth rate": cell_data.growth_rate,
+		"Cell age": cell_data.cell_age,
+		"Effective growth": cell_data.eff_growth,
+		"Cell type": cell_data.cell_type,
+		"Cell adhesion": cell_data.cell_adhesion,
+		"Target volume": cell_data.target_volume,
+		"Volume": cell_data.volume,
+		"Strain rate": cell_data.strain_rate,
+		"Start volume": cell_data.start_volume,
 	}
 
 	response_content = json.dumps(data)

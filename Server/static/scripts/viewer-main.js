@@ -225,7 +225,7 @@ async function updateCellInfo(context) {
 		cellDetailsHeader.style.display = "table-row-group";
 		cellDetailsSection.style.display = "table-row-group";
 
-//		cellDetailsSection.innerHTML = cellText;
+		cellDetailsSection.innerHTML = cellText;
 	}
 }
 
